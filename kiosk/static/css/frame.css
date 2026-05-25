@@ -1,0 +1,233 @@
+/* 기본 스타일 파라미터 초기화 */
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    font-family: 'Pretendard', 'Malgun Gothic', sans-serif;
+}
+
+body {
+    background-color: #0a0a0a;
+    background-image: url('../images/main_theme.png'); 
+    background-size: cover;
+    background-position: center;
+    background-attachment: fixed;
+    color: #ffffff;
+    height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+}
+
+.kiosk-wrapper {
+    width: 1280px;
+    height: 720px;
+    background: rgba(15, 15, 15, 0.75); 
+    backdrop-filter: blur(25px);
+    -webkit-backdrop-filter: blur(25px);
+    border: 1px solid rgba(255, 255, 255, 0.06); 
+    border-radius: 20px;
+    box-shadow: 0 40px 100px rgba(0, 0, 0, 0.8);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.kiosk-header {
+    height: 90px;
+    background: rgba(0, 0, 0, 0.4);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 50px;
+}
+
+.logo {
+    font-size: 1.5rem;
+    font-weight: 300; 
+    color: #ffffff;
+    letter-spacing: 4px; 
+}
+
+.timer-box {
+    font-size: 1rem;
+    font-weight: 400;
+    color: rgba(255, 255, 255, 0.8);
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    padding: 8px 20px;
+    border-radius: 4px; 
+}
+
+.kiosk-main {
+    flex: 1;
+    display: flex;
+}
+
+.preview-section {
+    flex: 1.2; 
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    border-right: 1px solid rgba(255, 255, 255, 0.05);
+    background: rgba(0, 0, 0, 0.2);
+}
+
+.control-section {
+    width: 480px;
+    padding: 50px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between; 
+}
+
+/* 2컷 프레임 프리뷰 배경색 파라미터 확장 */
+.frame-preview {
+    width: 250px;
+    height: 500px;
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    box-shadow: 0 30px 70px rgba(0, 0, 0, 0.6);
+    transition: background-color 0.3s ease;
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    border-radius: 4px;
+}
+
+/* 프리뷰 컬러 값 세팅 */
+.frame-preview.pink { background-color: #ffd1dc; }
+.frame-preview.blue { background-color: #0f2547; border: 1px solid rgba(255,255,255,0.05); } /* 럭셔리 딥 블루 */
+.frame-preview.green { background-color: #16291f; border: 1px solid rgba(255,255,255,0.05); } /* 보틀 그린 */
+.frame-preview.gray { background-color: #2c2c2e; border: 1px solid rgba(255,255,255,0.05); }  /* 애쉬 그레이 */
+.frame-preview.black { background-color: #121212; border: 1px solid rgba(255,255,255,0.1); }
+.frame-preview.white { background-color: #ffffff; }
+
+.photo-slot {
+    flex: 1;
+    background: rgba(255, 255, 255, 0.9);
+    border: 1px dashed rgba(0, 0, 0, 0.1);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: #888;
+    font-weight: 300;
+    font-size: 0.9rem;
+    letter-spacing: 1px;
+}
+
+/* 어두운 톤 프레임일 때의 슬롯 내부 스타일 일괄 처리 */
+.frame-preview.black .photo-slot,
+.frame-preview.blue .photo-slot,
+.frame-preview.green .photo-slot,
+.frame-preview.gray .photo-slot {
+    background: rgba(255, 255, 255, 0.05);
+    color: #888;
+    border: 1px dashed rgba(255, 255, 255, 0.1);
+}
+
+.frame-logo {
+    text-align: center;
+    font-weight: 400;
+    font-size: 1rem;
+    letter-spacing: 3px;
+}
+.frame-preview.pink .frame-logo { color: #ff6b6b; }
+.frame-preview.white .frame-logo { color: #121212; }
+.frame-preview.black .frame-logo,
+.frame-preview.blue .frame-logo,
+.frame-preview.green .frame-logo,
+.frame-preview.gray .frame-logo { color: #ffffff; }
+
+/* 옵션 그룹 */
+.option-group { margin-top: 20px; }
+.option-title {
+    font-size: 1.1rem;
+    font-weight: 400;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin-bottom: 25px;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+/* 컬러 피커 그룹에 줄바꿈 파라미터 추가 */
+.color-picker-group { 
+    display: flex; 
+    gap: 16px; 
+    flex-wrap: wrap; /* 버튼이 많아지면 자연스럽게 아래로 랩핑 */
+}
+
+/* 컬러 버튼 디자인 및 개별 색상 파라미터 */
+.color-btn {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.color-btn.pink { background-color: #ffd1dc; }
+.color-btn.blue { background-color: #0f2547; }
+.color-btn.green { background-color: #16291f; }
+.color-btn.gray { background-color: #2c2c2e; }
+.color-btn.black { background-color: #121212; }
+.color-btn.white { background-color: #ffffff; }
+
+.color-btn.active {
+    border-color: #ffffff;
+    box-shadow: 0 0 0 4px #0a0a0a, 0 0 0 5px #ffffff;
+    transform: scale(1.05);
+}
+
+.color-btn.custom-bg-btn {
+    background: rgba(255, 255, 255, 0.03);
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 1.4rem;
+    font-weight: 300;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    border: 1px dashed rgba(255, 255, 255, 0.3);
+}
+.color-btn.custom-bg-btn.active {
+    border: 1px solid #ffffff;
+    background: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+    box-shadow: 0 0 0 4px #0a0a0a, 0 0 0 5px #ffffff;
+}
+
+.navigation-group {
+    margin-top: auto;
+    width: 100%;
+}
+
+.btn-nav {
+    width: 100%;
+    padding: 20px 0;
+    font-size: 1rem;
+    font-weight: 500;
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-transform: uppercase;
+}
+
+.btn-next { 
+    background: #ffffff; 
+    color: #000000; 
+    letter-spacing: 2px;
+}
+
+.btn-next:hover {
+    background: rgba(255, 255, 255, 0.9);
+    box-shadow: 0 10px 30px rgba(255, 255, 255, 0.1);
+}
+
+.btn-next:active { 
+    transform: scale(0.99); 
+}

@@ -1,0 +1,174 @@
+/* csg@csg-com:~/doocut_ws/static/css/camera.css */
+/* 공통 리셋 및 보안 파라미터 설정 */
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    font-family: 'Pretendard', 'Malgun Gothic', sans-serif;
+}
+
+body {
+    background-color: #000000;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+}
+
+/* 카메라 스트리밍 화면이 브라우저를 꽉 채우도록 설정 */
+.camera-feed-bg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    z-index: 1;
+    filter: contrast(1.1) brightness(0.9);
+}
+
+/* UI 오버레이 래퍼 */
+.camera-ui-overlay {
+    position: relative;
+    z-index: 10;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 40px;
+}
+
+.camera-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.logo {
+    font-family: 'Pretendard', sans-serif;
+    font-size: 1.8rem;
+    font-weight: 800;
+    letter-spacing: -1px;
+    color: #ffffff;
+}
+
+.status-indicator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    letter-spacing: 1px;
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.1);
+    padding: 8px 16px;
+    border-radius: 20px;
+    backdrop-filter: blur(10px);
+}
+
+.recording-dot {
+    width: 12px;
+    height: 12px;
+    background-color: #ff3333;
+    border-radius: 50%;
+    animation: pulse 1s infinite alternate;
+}
+
+@keyframes pulse {
+    0% { opacity: 1; box-shadow: 0 0 8px #ff3333; }
+    100% { opacity: 0.3; box-shadow: 0 0 0px transparent; }
+}
+
+/* 중앙 뷰파인더 가이드라인 */
+.viewfinder {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 60%;
+    height: 70%;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.viewfinder .corner {
+    position: absolute;
+    width: 40px;
+    height: 40px;
+    border-color: #ffffff;
+    border-style: solid;
+}
+
+.top-left { top: 0; left: 0; border-width: 2px 0 0 2px; }
+.top-right { top: 0; right: 0; border-width: 2px 2px 0 0; }
+.bottom-left { bottom: 0; left: 0; border-width: 0 0 2px 2px; }
+.bottom-right { bottom: 0; right: 0; border-width: 0 2px 2px 0; }
+
+.camera-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.take-counter {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: #ffffff;
+}
+
+.total-takes {
+    color: rgba(255, 255, 255, 0.4);
+    font-weight: 400;
+    margin-left: 4px;
+}
+
+.info-text {
+    font-size: 0.9rem;
+    color: rgba(255, 255, 255, 0.6);
+    letter-spacing: 0.5px;
+}
+
+/* 🎯 리니어 프로그레스 타임 바 */
+.timeline-bar-wrapper { 
+    position: fixed; top: 0; left: 0; width: 100vw; height: 4px; 
+    background: rgba(255, 255, 255, 0.05); z-index: 10000; 
+}
+.timeline-bar-inner { 
+    height: 100%; width: 100%; 
+    background: linear-gradient(90deg, #DEFF9A, #a6ff00); 
+    box-shadow: 0 0 12px #DEFF9A; transition: width 1s linear; 
+}
+
+/* 🎯 [교정 완료] 타이머 구역을 화면 상단 정중앙(Top-Center)으로 기하학적 정렬 고도화 */
+.premium-timer-zone { 
+    position: fixed; 
+    top: 40px; 
+    left: 50%; 
+    transform: translateX(-50%); /* 정확히 상단 센터 축에 고정시키는 파라미터 */
+    display: flex; 
+    flex-direction: column; 
+    align-items: center; /* 텍스트 중앙 마크 */
+    z-index: 10000; 
+}
+.timer-numeric-wrap { 
+    font-family: 'Urbanist', sans-serif; font-size: 4.5rem; font-weight: 700; 
+    color: #ffffff; line-height: 1; letter-spacing: -2px; transition: all 0.15s ease; 
+    text-shadow: 0 5px 20px rgba(0,0,0,0.6); 
+}
+.timer-label { 
+    font-family: 'Pretendard', sans-serif; font-size: 0.8rem; font-weight: 600; 
+    color: #DEFF9A; letter-spacing: 5px; margin-top: 6px; text-transform: uppercase; 
+    text-shadow: 0 2px 5px rgba(0,0,0,0.5);
+}
+.tick-active { transform: scale(1.15); color: #DEFF9A; text-shadow: 0 0 30px rgba(222, 255, 154, 0.7); }
+
+/* 타임랩스 저장 중 로딩 오버레이 */
+.encoding-overlay {
+    position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+    background: rgba(0, 0, 0, 0.9); z-index: 99999; display: none;
+    flex-direction: column; justify-content: center; align-items: center;
+}
+.encoding-text { color: #DEFF9A; font-size: 1.5rem; font-weight: 700; margin-top: 20px; letter-spacing: 2px; }

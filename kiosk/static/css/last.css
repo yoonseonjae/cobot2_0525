@@ -1,0 +1,86 @@
+/* csg@csg-com:~/doocut_ws/static/css/last.css 전체 소스 코드 */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { 
+    background-color: #050505; 
+    color: #fff; 
+    font-family: 'Urbanist', 'Pretendard', sans-serif;
+    width: 100vw; height: 100vh;
+    display: flex; justify-content: center; align-items: center;
+    overflow: hidden;
+}
+
+.result-container {
+    width: 100%; max-width: 1200px; height: 90vh;
+    display: flex; flex-direction: column;
+    justify-content: space-between; align-items: center;
+}
+
+.result-header { text-align: center; margin-top: 10px; padding: 10px 0; }
+.logo { font-size: 2.2rem; font-weight: 700; letter-spacing: -1px; color: #fff; }
+.subtitle { color: #555; font-size: 0.75rem; margin-top: 4px; letter-spacing: 6px; font-weight: 700; }
+
+.content-split-layout {
+    display: flex; justify-content: center; align-items: center;
+    gap: 120px; width: 100%; flex-grow: 1;
+}
+
+.photo-strip-wrapper {
+    display: flex; justify-content: center; align-items: center;
+    filter: drop-shadow(0 25px 50px rgba(0, 0, 0, 0.95));
+}
+
+.photo-strip {
+    width: 360px; display: flex; flex-direction: column;
+    gap: 20px; padding: 25px; border-radius: 4px; transition: all 0.3s ease;
+}
+
+.photo-slot {
+    width: 100%; aspect-ratio: 4 / 5; background-color: #000;
+    overflow: hidden; border-radius: 4px; border: 1px solid rgba(255,255,255,0.05);
+}
+
+.photo-slot img {
+    width: 100%; height: 100%; display: block; object-fit: cover; 
+    filter: contrast(1.03) brightness(1.02);
+}
+
+.strip-header { text-align: center; font-size: 1.2rem; font-weight: 700; letter-spacing: 5px; padding: 10px 0; }
+.strip-footer { text-align: right; font-size: 0.8rem; font-weight: 500; letter-spacing: 1px; padding-top: 5px; font-variant-numeric: tabular-nums; }
+
+.action-panel { display: flex; flex-direction: column; gap: 18px; width: 320px; }
+.btn-action, .btn-retry {
+    display: flex; align-items: center; justify-content: center; gap: 16px;
+    width: 100%; padding: 22px; font-size: 1.1rem; font-weight: 500;
+    background-color: transparent; border: 1px solid #222; color: #fff; cursor: pointer;
+    border-radius: 4px; transition: all 0.25s ease;
+}
+.btn-action i, .btn-retry i { font-size: 1.25rem; color: #DEFF9A; }
+.btn-action:hover { border-color: #DEFF9A; background-color: rgba(222, 255, 154, 0.05); transform: translateX(-4px); }
+.divider { height: 1px; background-color: #1a1a1a; margin: 8px 0; }
+.btn-retry { border-color: #DEFF9A; color: #DEFF9A; }
+.btn-retry:hover { background-color: #DEFF9A; color: #000; }
+
+.photo-strip.pink { background-color: #ffd1dc !important; }
+.photo-strip.blue { background-color: #0f2547 !important; }
+.photo-strip.green { background-color: #16291f !important; }
+.photo-strip.gray { background-color: #2c2c2e !important; }
+.photo-strip.black { background-color: #121212 !important; border: 1px solid #333; }
+.photo-strip.white { background-color: #ffffff !important; border: 1px solid #ddd; }
+
+.qr-modal-overlay {
+    position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+    background: rgba(0, 0, 0, 0.85); backdrop-filter: blur(10px);
+    display: flex; justify-content: center; align-items: center; z-index: 99999;
+}
+.qr-modal-content {
+    background: #111; border: 1px solid #333; padding: 50px; border-radius: 8px;
+    display: flex; flex-direction: column; align-items: center;
+    box-shadow: 0 20px 60px rgba(0,0,0,1); position: relative;
+    animation: popIn 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+}
+@keyframes popIn { 0% { transform: scale(0.9); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+.qr-close-btn { position: absolute; top: 20px; right: 20px; background: transparent; border: none; color: #888; font-size: 1.5rem; cursor: pointer; transition: color 0.2s; }
+.qr-close-btn:hover { color: #DEFF9A; }
+.qr-title { color: #DEFF9A; font-family: 'Urbanist', sans-serif; font-size: 2.5rem; font-weight: 700; letter-spacing: 2px; margin-bottom: 10px; }
+.qr-desc { color: #aaa; text-align: center; font-size: 1rem; line-height: 1.5; margin-bottom: 30px; }
+.qr-canvas-wrapper { background: #fff; padding: 20px; border-radius: 4px; }

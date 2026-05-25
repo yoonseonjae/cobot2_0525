@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>인생두컷 - 음성 인식</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/voice.css') }}">
+</head>
+<body>
+
+    <div class="fullscreen-bg">
+        <img src="{{ url_for('static', filename='images/main_theme.png') }}" class="fullscreen-bg__image" alt="메인 배경 테마">
+    </div>
+
+    <div class="screen-overlay" id="voiceScreen">
+        <!-- 타자 쳐질 텍스트들이 표시될 컨테이너 -->
+        <div class="voice-text-container">
+            <h1 class="typing-text" id="typeText1"></h1>
+            <h2 class="typing-text subtitle" id="typeText2"></h2>
+        </div>
+
+        <!-- 음성 대기 중 로딩창 (애니메이션 파동) -->
+        <div class="voice-loader-container" id="voiceLoader" style="opacity: 0;">
+            <div class="wave-box">
+                <div class="wave"></div>
+                <div class="wave"></div>
+                <div class="wave"></div>
+                <div class="wave"></div>
+                <div class="wave"></div>
+            </div>
+            <p class="loader-text">듣고 있습니다...</p>
+        </div>
+
+        <!-- 🎯 [NEW] 컨셉 매핑 및 실시간 소품 수거 상태 프리미엄 UI -->
+        <div class="concept-display-container" id="conceptDisplayContainer" style="display: none;">
+            <div class="concept-header">
+                <span class="concept-tag" id="conceptTag">THEME</span>
+                <h2 class="concept-title" id="conceptTitle">컨셉 로딩 중...</h2>
+                <p class="concept-desc" id="conceptDesc">로봇이 소품을 준비하고 있습니다.<br>소품을 건네받은 후, 로봇을 가볍게 터치해 주세요.</p>
+            </div>
+            
+            <div class="tools-grid" id="toolsGrid">
+                <!-- Javascript에서 컨셉에 맞는 소품 리스트 동적 렌더링 -->
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/voice.js') }}"></script>
+</body>
+</html>

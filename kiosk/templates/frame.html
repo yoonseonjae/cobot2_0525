@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>인생두컷 - 프레임 선택</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/frame.css') }}">
+</head>
+
+<body>
+
+    <div class="kiosk-wrapper">
+        <header class="kiosk-header">
+            <span class="logo">인생두컷</span>
+            <div class="timer-box">남은 시간 <span id="timer">02:00</span></div>
+        </header>
+
+        <main class="kiosk-main">
+            <section class="preview-section">
+                <div class="frame-preview pink" id="framePreview">
+                    <div class="photo-slot"><span>PHOTO 1</span></div>
+                    <div class="photo-slot"><span>PHOTO 2</span></div>
+                    <div class="frame-logo">인생두컷</div>
+                </div>
+            </section>
+
+            <section class="control-section">
+                <div class="option-group">
+                    <h2 class="option-title">배경 선택</h2>
+                    <div class="color-picker-group">
+                        <button class="color-btn pink active" data-color="pink" title="분홍색"></button>
+                        <button class="color-btn blue" data-color="blue" title="라이온즈 블루"></button>
+                        <button class="color-btn green" data-color="green" title="보틀 그린"></button>
+                        <button class="color-btn gray" data-color="gray" title="애쉬 그레이"></button>
+                        <button class="color-btn black" data-color="black" title="검정색"></button>
+                        <button class="color-btn white" data-color="white" title="하얀색"></button>
+
+                        <button class="color-btn custom-bg-btn" id="btnCustomBgTrigger" title="사진 업로드">＋</button>
+                        <input type="file" id="customBgInput" accept="image/*" style="display: none;">
+                    </div>
+                </div>
+
+                <div class="navigation-group">
+                    <button class="btn-nav btn-next" id="btnNext">다음 단계</button>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/frame.js') }}"></script>
+</body>
+
+</html>

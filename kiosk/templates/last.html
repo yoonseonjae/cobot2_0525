@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>인생두컷 - 최종 결과</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/last.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Urbanist:wght@300;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
+</head>
+
+<body>
+    <div class="result-container">
+        <header class="result-header">
+            <h1 class="logo">인생두컷</h1>
+            <p class="subtitle">PIECE OF MEMORY</p>
+        </header>
+
+        <main class="content-split-layout">
+            <div class="photo-strip-wrapper">
+                <div class="photo-strip" id="userSelectedFrame">
+                    <div class="strip-header" id="stripHeader">INSAENG 2 CUT</div>
+                    <div class="photo-slot"><img id="cut1" src="" alt="First Shot"></div>
+                    <div class="photo-slot"><img id="cut2" src="" alt="Second Shot"></div>
+                    <div class="strip-footer" id="currentDate"></div>
+                </div>
+            </div>
+
+            <div class="action-panel">
+                <button class="btn-action" onclick="generateQR()" id="btnQr">
+                    <i class="fa-solid fa-qrcode"></i> QR 코드로 사진 받기
+                </button>
+                <button class="btn-action" onclick="saveVideo()">
+                    <i class="fa-solid fa-video"></i> 타임랩스 영상 저장
+                </button>
+                <div class="divider"></div>
+                <button class="btn-retry" onclick="location.href='/'">
+                    <i class="fa-solid fa-rotate-right"></i> 처음으로 돌아가기
+                </button>
+            </div>
+        </main>
+    </div>
+
+    <div class="qr-modal-overlay" id="qrModal" style="display: none;">
+        <div class="qr-modal-content">
+            <button class="qr-close-btn" onclick="closeQrModal()"><i class="fa-solid fa-xmark"></i></button>
+            <h2 class="qr-title">SCAN ME</h2>
+            <p class="qr-desc">스마트폰 카메라로 스캔하여<br>고화질 원본 사진을 다운로드하세요!</p>
+            <div class="qr-canvas-wrapper">
+                <canvas id="qrCanvas"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        window.SERVER_IP = "{{ local_ip }}";
+    </script>
+    <script src="{{ url_for('static', filename='js/last.js') }}"></script>
+</body>
+
+</html>

@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>인생두컷 - 시작하기</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+
+    <div class="fullscreen-bg">
+        <img src="{{ url_for('static', filename='images/main_theme.png') }}" class="fullscreen-bg__image" alt="메인 배경 테마">
+    </div>
+
+    <div class="screen-overlay" id="startScreen">
+        <div class="touch-prompt">클릭하여 시작</div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>

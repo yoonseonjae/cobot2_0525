@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>인생두컷 - 촬영하기</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/camera.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    
+    <div class="timeline-bar-wrapper"><div id="timelineBar" class="timeline-bar-inner"></div></div>
+    
+    <div class="premium-timer-zone">
+        <div id="timerText" class="timer-numeric-wrap">40</div>
+        <div class="timer-label">Remaining Time</div>
+    </div>
+
+    <img id="realsenseFeed" class="camera-feed-bg" crossorigin="anonymous" src="" alt="Remote Camera Feed Standby">
+
+    <div class="camera-ui-overlay">
+        <header class="camera-header">
+            <span class="logo">인생두컷</span>
+            <div class="status-indicator"><span class="recording-dot"></span> RECORDING TIMELAPSE</div>
+        </header>
+
+        <div class="viewfinder">
+            <div class="corner top-left"></div><div class="corner top-right"></div>
+            <div class="corner bottom-left"></div><div class="corner bottom-right"></div>
+        </div>
+
+        <footer class="camera-footer">
+            <div class="take-counter">
+                <span id="currentCut">1</span><span class="total-takes">/ 2 CUTS</span>
+            </div>
+            <div class="info-text">데이터베이스 신호 대기 중</div>
+        </footer>
+    </div>
+
+    <div class="encoding-overlay" id="encodingOverlay">
+        <i class="fa-solid fa-compact-disc fa-spin" style="font-size: 4rem; color: #DEFF9A;"></i>
+        <div class="encoding-text">타임랩스 (3배속) 데이터 인코딩 중...</div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/camera.js') }}"></script>
+</body>
+</html>

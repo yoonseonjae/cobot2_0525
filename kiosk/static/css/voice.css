@@ -1,0 +1,337 @@
+/* csg@csg-com:~/doocut_ws/static/css/voice.css */
+
+/* 오버레이 정렬 오버라이드 (가운데 정렬로 변경) */
+#voiceScreen {
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.88); /* 진짜 입장한 듯한 압도적이고 깊이 있는 어두운 무드 */
+    transition: background 1s ease-in-out;
+}
+
+/* 텍스트 컨테이너 */
+.voice-text-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 30px;
+    margin-bottom: 50px;
+    height: 250px; /* 고정 높이 주어 애니메이션 시 덜컥거림 방지 */
+}
+
+/* 타이핑 텍스트 기본 스타일 */
+.typing-text {
+    font-family: 'Pretendard', sans-serif;
+    color: #ffffff;
+    font-weight: 200;
+    font-size: 5rem;
+    letter-spacing: 2px;
+    text-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+    margin: 0;
+    min-height: 1.2em; /* 텍스트가 없을 때도 높이 유지 */
+}
+
+/* 두 번째 텍스트 스타일 */
+.typing-text.subtitle {
+    font-size: 3rem;
+    color: #DEFF9A; /* 브랜드 컬러 포인트 */
+    font-weight: 300;
+}
+
+/* 커서 깜빡임 애니메이션 (JS에서 클래스 토글) */
+.typing-text::after {
+    content: '|';
+    opacity: 1;
+    animation: blink 0.8s infinite;
+    color: #ffffff;
+    margin-left: 5px;
+}
+
+/* 타이핑 끝난 뒤 커서 안 보이게 하거나 특정 요소만 남기기용 */
+.typing-text.done::after {
+    display: none;
+}
+
+@keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+}
+
+/* 음성 대기 중 로딩창 (파동 애니메이션) */
+.voice-loader-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+    transition: opacity 1.5s ease-in-out;
+}
+
+.loader-text {
+    color: #aaaaaa;
+    font-weight: 300;
+    font-size: 1.2rem;
+    letter-spacing: 3px;
+    margin-top: 10px;
+    animation: pulseText 2s infinite ease-in-out;
+}
+
+@keyframes pulseText {
+    0%, 100% { opacity: 0.5; }
+    50% { opacity: 1; }
+}
+
+/* 오디오 웨이브 컨테이너 */
+.voice-loader-container .wave-box {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 60px;
+    gap: 8px;
+}
+
+/* 오디오 파동 바 */
+.wave {
+    width: 6px;
+    height: 15px;
+    background: #DEFF9A;
+    border-radius: 10px;
+    animation: waveAnim 1s infinite ease-in-out;
+}
+
+.wave:nth-child(1) { animation-delay: -1.0s; height: 20px; }
+.wave:nth-child(2) { animation-delay: -0.8s; height: 40px; }
+.wave:nth-child(3) { animation-delay: -0.6s; height: 60px; }
+.wave:nth-child(4) { animation-delay: -0.4s; height: 40px; }
+.wave:nth-child(5) { animation-delay: -0.2s; height: 20px; }
+
+@keyframes waveAnim {
+    0%, 100% {
+        transform: scaleY(0.5);
+        opacity: 0.5;
+    }
+    50% {
+        transform: scaleY(1.5);
+        opacity: 1;
+        box-shadow: 0 0 10px #DEFF9A;
+    }
+}
+
+/* ----------------------------------------------------
+   [컨셉 확정 및 소품 체크리스트 프리미엄 스타일]
+   ---------------------------------------------------- */
+.concept-display-container {
+    width: 100%;
+    max-width: 900px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 40px;
+    animation: fadeInUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    padding: 20px;
+    z-index: 10;
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(30px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.concept-header {
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+}
+
+.concept-tag {
+    font-size: 0.9rem;
+    font-weight: 700;
+    letter-spacing: 3px;
+    padding: 6px 16px;
+    border-radius: 40px;
+    text-transform: uppercase;
+    box-shadow: 0 0 15px rgba(255, 255, 255, 0.1);
+}
+
+.concept-title {
+    font-size: 3.5rem;
+    font-weight: 700;
+    margin: 0;
+    letter-spacing: 1px;
+}
+
+.concept-desc {
+    font-size: 1.1rem;
+    color: rgba(255, 255, 255, 0.6);
+    font-weight: 300;
+    margin: 0;
+}
+
+/* 컨셉별 테마 스타일 정의 */
+/* 1. 생일 (Pink) */
+.theme-birthday .concept-tag {
+    background: rgba(255, 105, 180, 0.2);
+    color: #ff69b4;
+    border: 1px solid rgba(255, 105, 180, 0.4);
+}
+.theme-birthday .concept-title {
+    color: #ff8da1;
+    text-shadow: 0 0 20px rgba(255, 105, 180, 0.6);
+}
+.theme-birthday-bg {
+    background: radial-gradient(circle, rgba(60, 10, 30, 0.95) 0%, rgba(10, 5, 15, 0.98) 100%) !important;
+}
+
+/* 2. 공주 (Princess - Violet & Gold) */
+.theme-princess .concept-tag {
+    background: rgba(230, 190, 255, 0.15);
+    color: #e6beff;
+    border: 1px solid rgba(230, 190, 255, 0.3);
+}
+.theme-princess .concept-title {
+    color: #ffd700; /* 골드 타이틀 */
+    text-shadow: 0 0 25px rgba(255, 215, 0, 0.5), 0 0 15px rgba(138, 43, 226, 0.8);
+}
+.theme-princess-bg {
+    background: radial-gradient(circle, rgba(30, 10, 45, 0.95) 0%, rgba(5, 3, 10, 0.98) 100%) !important;
+}
+
+/* 3. 해변 (Beach - Aqua Blue) */
+.theme-beach .concept-tag {
+    background: rgba(0, 240, 255, 0.15);
+    color: #00f0ff;
+    border: 1px solid rgba(0, 240, 255, 0.3);
+}
+.theme-beach .concept-title {
+    color: #7df9ff;
+    text-shadow: 0 0 20px rgba(0, 240, 255, 0.6);
+}
+.theme-beach-bg {
+    background: radial-gradient(circle, rgba(5, 30, 40, 0.95) 0%, rgba(2, 5, 15, 0.98) 100%) !important;
+}
+
+
+/* 소품 그리드 & 카드 디자인 */
+.tools-grid {
+    display: flex;
+    justify-content: center;
+    gap: 30px;
+    width: 100%;
+    max-width: 750px;
+    margin-top: 10px;
+}
+
+.tool-card {
+    flex: 1;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 24px;
+    padding: 30px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    position: relative;
+    overflow: hidden;
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+}
+
+.tool-icon {
+    font-size: 3rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 80px;
+    height: 80px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 20px;
+    transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.tool-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex-grow: 1;
+}
+
+.tool-name {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #ffffff;
+}
+
+.tool-eng-name {
+    font-size: 0.9rem;
+    color: rgba(255, 255, 255, 0.4);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.tool-status-badge {
+    font-size: 0.85rem;
+    padding: 6px 12px;
+    border-radius: 12px;
+    background: rgba(255, 193, 7, 0.1);
+    color: #ffc107;
+    border: 1px solid rgba(255, 193, 7, 0.2);
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    align-self: flex-start;
+    margin-top: 6px;
+}
+
+/* 준비 상태 완료(true) 시 */
+.tool-card.ready {
+    background: rgba(46, 213, 115, 0.06);
+    border-color: rgba(46, 213, 115, 0.4);
+    box-shadow: 0 0 30px rgba(46, 213, 115, 0.15);
+    transform: translateY(-5px);
+}
+
+.tool-card.ready .tool-icon {
+    background: rgba(46, 213, 115, 0.15);
+    transform: scale(1.05);
+}
+
+.tool-card.ready .tool-status-badge {
+    background: rgba(46, 213, 115, 0.2);
+    color: #2ed573;
+    border-color: rgba(46, 213, 115, 0.3);
+}
+
+/* 체크마크 아이콘 애니메이션 */
+.tool-status-badge::before {
+    content: '';
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    background: currentColor;
+    border-radius: 50%;
+    animation: statusPulse 1.5s infinite ease-in-out;
+}
+
+.tool-card.ready .tool-status-badge::before {
+    content: '✓';
+    display: inline-block;
+    width: auto;
+    height: auto;
+    background: none;
+    border-radius: 0;
+    animation: none;
+    font-weight: bold;
+}
+
+@keyframes statusPulse {
+    0%, 100% { opacity: 0.3; transform: scale(0.8); }
+    50% { opacity: 1; transform: scale(1.3); }
+}
