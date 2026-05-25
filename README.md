@@ -14,7 +14,7 @@ Doosan M0609 협동로봇과 음성/제스처 인식을 활용한 인터랙티�
 
 ## 시스템 구성
 
-**2대의 PC가 같은 LAN + Firebase Realtime DB로 통신합니다.**
+**2대의 PC가 같은 WiFi(또는 같은 공유기)에 연결되어 있고, 그 위에서 Firebase Realtime DB로 신호를 주고받습니다.**
 
 | PC | 역할 | 폴더 |
 |---|---|---|
@@ -146,13 +146,14 @@ source install/setup.bash
 ## 통신 흐름
 
 ```
-Firebase RTDB (네트워크 무관 신호 채널)
+Firebase RTDB (인터넷만 되면 OK — 작은 신호용)
 ├── /start, /end, /voice_ok, /concept, /tool, /capture, /robot_ip
 │
 키오스크 PC ←─ Firebase ─→ 메인 PC
      │                          │
-     └──── LAN HTTP ────────────┘
+     └─── 같은 WiFi 내 HTTP ────┘
         키오스크가 메인PC :5000/video_feed (MJPEG) 수신
+        ※ 두 PC가 같은 공유기에 연결돼 있어야 함
 ```
 
 ---
