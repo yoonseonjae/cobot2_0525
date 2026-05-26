@@ -5,10 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>인생두컷 - 촬영하기</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/camera.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/safety_overlay.css') }}">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
-    
+    <script src="{{ url_for('static', filename='js/safety_overlay.js') }}"></script>
+
     <div class="timeline-bar-wrapper"><div id="timelineBar" class="timeline-bar-inner"></div></div>
     
     <div class="premium-timer-zone">

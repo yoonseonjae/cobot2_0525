@@ -10,6 +10,19 @@
 </head>
 <body>
     <div class="dashboard-container">
+        <!-- Safety Mode Overlay Banner (NORMAL일 때 숨김) -->
+        <div id="safety-banner" class="safety-banner hidden">
+            <div class="safety-banner-inner">
+                <div class="safety-banner-title" id="safety-banner-title">안전정지모드</div>
+                <div class="safety-banner-sub" id="safety-banner-sub">사유 표시</div>
+                <div class="safety-banner-timer hidden" id="safety-banner-timer">5.0s</div>
+                <div class="safety-banner-actions hidden" id="safety-banner-actions">
+                    <button class="btn btn-secondary" id="safety-resume-btn">재개</button>
+                    <button class="btn btn-warning" id="safety-home-btn">처음으로</button>
+                </div>
+            </div>
+        </div>
+
         <!-- Header -->
         <header class="dashboard-header">
             <div class="logo">

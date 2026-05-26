@@ -69,7 +69,10 @@ class SafetyMonitor(Node):
         self.zone_file  = self.get_parameter('zone_file').value
 
         # ── 퍼블리셔 / 구독 ──
+        # /safety_alert: 히스테리시스 적용된 confirmed 상태 (전이 시에만 publish)
+        # /safety_state: 프레임마다 raw 상태 publish (대시보드에서 2s/10frame 카운트용)
         self.alert_pub = self.create_publisher(String, '/safety_alert', 10)
+        self.state_pub = self.create_publisher(String, '/safety_state', 10)
         self.image_pub = self.create_publisher(Image,  '/safety_image', 10)
         self.bridge    = CvBridge()
         self.zone_sub  = self.create_subscription(
@@ -173,6 +176,11 @@ class SafetyMonitor(Node):
 
                 annotated, state = self._process_frame(frame)
                 self._update_state(state)
+
+                # 프레임별 raw state publish (대시보드 debounce용)
+                fmsg = String()
+                fmsg.data = state
+                self.state_pub.publish(fmsg)
 
                 try:
                     img_msg = self.bridge.cv2_to_imgmsg(annotated, encoding='bgr8')

@@ -1,5 +1,6 @@
 import math
 import time
+import json
 import numpy as np
 import cv2
 import mediapipe as mp
@@ -123,6 +124,11 @@ class GestureCameraNode(Node):
         self.pub_image = self.create_publisher(CompressedImage, f"/{ROBOT_ID}/gesture_view/compressed", 10)
         self.pub_cmd = self.create_publisher(String, f"/{ROBOT_ID}/gesture_cmd", 10)
         self.bridge = CvBridge()
+
+        # 안전모드 (대시보드 /dsr01/safety_cmd 수신)
+        self.paused = False
+        self.sub_safety = self.create_subscription(
+            String, f"/{ROBOT_ID}/safety_cmd", self._safety_cb, 10)
         
         # 💡 [핵심 1] Realsense ROS 노드의 토픽 구독 (압축 컬러 + 원본 깊이)
         # QoS: 정수 depth=10 → RELIABLE. sensor_data(BEST_EFFORT)는 매칭은 되지만
@@ -174,6 +180,18 @@ class GestureCameraNode(Node):
             self.task_completed = True
             self.get_logger().info("🚀 작업 완료 신호 수신! 제스처 카메라 분석을 시작합니다.")
 
+    def _safety_cb(self, msg: String):
+        try:
+            cmd = json.loads(msg.data).get("cmd", "")
+        except Exception:
+            cmd = msg.data.strip()
+        if cmd == "PAUSE":
+            self.paused = True
+            self.get_logger().warn("🛡️ 제스처 카메라: PAUSE - 입력 차단")
+        elif cmd in ("RESUME", "RESET_HOME"):
+            self.paused = False
+            self.get_logger().warn(f"🛡️ 제스처 카메라: {cmd} - 입력 허용")
+
     def _depth_cb(self, msg: Image):
         self.latest_depth_msg = msg
 
@@ -212,7 +230,13 @@ class GestureCameraNode(Node):
         command_to_send = None
         active_icons = []
 
-        if result.multi_hand_landmarks:
+        # 안전모드면 모든 제스처 인식·명령·캡처 트리거를 건너뜀 (화면 송출은 유지)
+        if self.paused:
+            # 화면 위에 안전모드 표시
+            cv2.rectangle(frame, (0, 0), (cw, 40), (0, 0, 0), -1)
+            cv2.putText(frame, "SAFETY MODE - GESTURES DISABLED", (10, 28),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 200, 255), 2)
+        elif result.multi_hand_landmarks:
             self.mp_draw.draw_landmarks(frame, result.multi_hand_landmarks[0], self.mp_hands.HAND_CONNECTIONS)
             lm = result.multi_hand_landmarks[0].landmark
             

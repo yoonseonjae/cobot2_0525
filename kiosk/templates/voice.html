@@ -6,8 +6,10 @@
     <title>인생두컷 - 음성 인식</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/voice.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/safety_overlay.css') }}">
 </head>
 <body>
+    <script src="{{ url_for('static', filename='js/safety_overlay.js') }}"></script>
 
     <div class="fullscreen-bg">
         <img src="{{ url_for('static', filename='images/main_theme.png') }}" class="fullscreen-bg__image" alt="메인 배경 테마">
