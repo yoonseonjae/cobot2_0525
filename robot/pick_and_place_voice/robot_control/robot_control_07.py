@@ -33,6 +33,7 @@ VELOCITY, ACC = 60, 60
 BUCKET_POS = [8.12, 2.06, 89.98, 93.83, -98.11, 1.09]
 JOBSERVATION_POS = [-154.26, 2.99, 56.17, -4.67, 120.75, 111.23]
 JHOME_POS = [0, 0, 90, 0, 90, 0]
+JPICKUP_POS = [-85.38, -25.32, 108.59, -5.97, 49.22, 7.32]
 GRIPPER_NAME = "rg2"
 TOOLCHARGER_IP = "192.168.1.1"
 TOOLCHARGER_PORT = "502"
@@ -313,9 +314,9 @@ class RobotController(Node):
         # [수정] 15cm 상승 동작이 무시되거나 홈 이동과 겹치지 않도록 상승 직후 0.5초 대기
         time.sleep(0.5)
         
-        # 7. 홈 좌표(JHOME_POS)로 이동
-        self.get_logger().info(f"[DEBUG] 물체를 들고 홈 좌표(JHOME_POS)로 이동합니다.")
-        movej(posj(JHOME_POS), vel=VELOCITY, acc=ACC)
+        # 7. 물품 수령 위치(JPICKUP_POS)로 이동
+        self.get_logger().info(f"[DEBUG] 물체를 들고 수령 위치(JPICKUP_POS)로 이동합니다.")
+        movej(posj(JPICKUP_POS), vel=VELOCITY, acc=ACC)
         mwait()
         
         # 이전 8번 단계(그리퍼 열어 물체 놓기)는 삭제됨. 이제 wait_and_drop 에서 수행.
