@@ -69,7 +69,10 @@ class SafetyMonitor(Node):
         self.zone_file  = self.get_parameter('zone_file').value
 
         # ── 퍼블리셔 / 구독 ──
+        # /safety_alert: 히스테리시스 적용된 confirmed 상태 (전이 시에만 publish)
+        # /safety_state: 프레임마다 raw 상태 publish (대시보드에서 2s/10frame 카운트용)
         self.alert_pub = self.create_publisher(String, '/safety_alert', 10)
+        self.state_pub = self.create_publisher(String, '/safety_state', 10)
         self.image_pub = self.create_publisher(Image,  '/safety_image', 10)
         self.bridge    = CvBridge()
         self.zone_sub  = self.create_subscription(
@@ -174,6 +177,11 @@ class SafetyMonitor(Node):
                 annotated, state = self._process_frame(frame)
                 self._update_state(state)
 
+                # 프레임별 raw state publish (대시보드 debounce용)
+                fmsg = String()
+                fmsg.data = state
+                self.state_pub.publish(fmsg)
+
                 try:
                     img_msg = self.bridge.cv2_to_imgmsg(annotated, encoding='bgr8')
                     self.image_pub.publish(img_msg)
@@ -238,17 +246,19 @@ class SafetyMonitor(Node):
                 robot_contours.extend(ctrs)
 
         # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        # [2] 구역 내 사람 판단
+        # [2] 구역 내 "손(=human contour)" 판단
+        #   - human contour 점 중 하나라도 zone polygon 안이면 hand_in_zone=True
+        #   - zone이 설정되지 않은 경우에는 (요청 정책상) CLEAR 유지를 위해 False
         # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        persons_in_zone = []
-
-        if mask_zone is not None:
-            for hb in human_boxes:
-                if mask_zone[hb[1], hb[0]] == 255:
-                    persons_in_zone.append(('yolo', hb))
-        else:
-            for hb in human_boxes:
-                persons_in_zone.append(('yolo', hb))
+        hand_in_zone = False
+        if mask_zone is not None and human_contours:
+            hp_pts = np.array(
+                [pt[0] for c in human_contours for pt in c], dtype=np.int32)
+            if len(hp_pts) > 0:
+                xs = np.clip(hp_pts[:, 0], 0, w - 1)
+                ys = np.clip(hp_pts[:, 1], 0, h - 1)
+                if np.any(mask_zone[ys, xs] == 255):
+                    hand_in_zone = True
 
         # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         # [3] 로봇 ↔ 사람 최단 거리 (YOLO)
@@ -285,14 +295,15 @@ class SafetyMonitor(Node):
 
         # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         # [4] 상태 결정
+        #   - 손이 zone 안 + 로봇 접촉(<= stop_dist)  → STOP
+        #   - 손이 zone 안 + 접촉 아님                → WARN
+        #   - 손이 zone 밖이면 (접촉 여부 무관)        → CLEAR
         # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         raw_state = "CLEAR"
-        if persons_in_zone:
-            raw_state = "STOP" if min_dist <= self.stop_dist else "WARN"
-        elif min_dist != float('inf'):
-            if min_dist <= self.stop_dist:
+        if hand_in_zone:
+            if min_dist != float('inf') and min_dist <= self.stop_dist:
                 raw_state = "STOP"
-            elif min_dist <= self.warn_dist:
+            else:
                 raw_state = "WARN"
 
         # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -342,7 +353,7 @@ class SafetyMonitor(Node):
         # HUD
         cv2.rectangle(annotated, (0,0), (w,42), (0,0,0), -1)
         dist_str = f"{int(self._last_distance)}px" if self._last_distance >= 0 else "N/A"
-        hud = (f"SAFETY: {raw_state}  |  in_zone={len(persons_in_zone)}  |  "
+        hud = (f"SAFETY: {raw_state}  |  hand_in_zone={int(hand_in_zone)}  |  "
                f"dist={dist_str}[{dist_mode}]")
         cv2.putText(annotated, hud, (8,27),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.52, state_color, 2)

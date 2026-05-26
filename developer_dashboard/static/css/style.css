@@ -521,3 +521,60 @@ body {
     color: white;
     box-shadow: 0 0 30px var(--neon-red);
 }
+
+/* ── Safety Mode Banner ─────────────────────────────────────────────── */
+.safety-banner {
+    position: fixed;
+    top: 1.2rem;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 999;
+    background: rgba(20, 26, 42, 0.85);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border-radius: 14px;
+    padding: 0.9rem 2rem;
+    min-width: 380px;
+    text-align: center;
+    pointer-events: auto;
+    animation: pulseGlow 1.6s ease-in-out infinite;
+}
+.safety-banner.hidden { display: none; }
+.safety-banner.pause  { border: 2px solid var(--neon-purple); box-shadow: 0 0 28px rgba(176,91,255,0.5); }
+.safety-banner.emerg  { border: 2px solid var(--neon-red);    box-shadow: 0 0 30px rgba(255,51,102,0.55); }
+
+.safety-banner-title {
+    font-size: 1.4rem;
+    font-weight: 800;
+    letter-spacing: 2px;
+}
+.safety-banner.pause .safety-banner-title { color: var(--neon-purple); }
+.safety-banner.emerg .safety-banner-title { color: var(--neon-red); }
+
+.safety-banner-sub {
+    margin-top: 0.3rem;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+}
+.safety-banner-timer {
+    margin-top: 0.5rem;
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: var(--neon-green);
+    font-variant-numeric: tabular-nums;
+}
+.safety-banner-timer.hidden { display: none; }
+
+.safety-banner-actions {
+    margin-top: 0.7rem;
+    display: flex;
+    gap: 0.6rem;
+    justify-content: center;
+}
+.safety-banner-actions.hidden { display: none; }
+.safety-banner-actions .btn { padding: 0.5rem 1.2rem; font-size: 0.9rem; }
+
+@keyframes pulseGlow {
+    0%, 100% { filter: brightness(1.0); }
+    50%      { filter: brightness(1.25); }
+}

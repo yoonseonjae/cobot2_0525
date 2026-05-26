@@ -2,6 +2,7 @@ import os
 import json
 import time
 import threading
+from collections import deque
 import numpy as np
 import cv2
 from flask import Flask, render_template, Response, jsonify, request
@@ -12,6 +13,16 @@ from std_msgs.msg import String, Bool
 from sensor_msgs.msg import CompressedImage, Image
 from rcl_interfaces.msg import Log
 from cv_bridge import CvBridge
+
+# Doosan service msgs (motion pause/resume/stop, robot state, safety reset)
+try:
+    from dsr_msgs2.srv import (
+        MovePause, MoveResume, MoveStop,
+        GetRobotState, SetSafeStopResetType, SetSafetyMode,
+    )
+    _DSR_SRV_OK = True
+except Exception:
+    _DSR_SRV_OK = False
 
 import requests
 
@@ -30,6 +41,23 @@ app.config['TEMPLATES_AUTO_RELOAD'] = True
 
 ROBOT_ID = "dsr01"
 FIREBASE_BASE = "https://rokey-coop2-default-rtdb.asia-southeast1.firebasedatabase.app"
+
+# ── Safety mode 임계값 ──
+SAFETY_FRAME_WINDOW_SEC = 2.0   # 카운트 윈도우
+SAFETY_FRAME_THRESHOLD  = 10    # 윈도우 내 동일 상태 프레임 수
+RESUME_COUNTDOWN_SEC    = 5.0   # 안전정지 해제 → 복귀까지 카운트다운
+ROBOT_STATE_POLL_SEC    = 0.5   # get_robot_state 폴링 주기
+# Doosan robot_state 상수
+DSR_STATE_STANDBY        = 1
+DSR_STATE_MOVING         = 2
+DSR_STATE_SAFE_OFF       = 3
+DSR_STATE_SAFE_STOP      = 5
+DSR_STATE_EMERGENCY_STOP = 6
+DSR_STATE_SAFE_STOP2     = 9
+DSR_STATE_SAFE_OFF2      = 10
+COLLISION_SAFE_STOP_STATES  = {DSR_STATE_SAFE_OFF, DSR_STATE_SAFE_STOP,
+                               DSR_STATE_SAFE_STOP2, DSR_STATE_SAFE_OFF2}
+COLLISION_EMERGENCY_STATES  = {DSR_STATE_EMERGENCY_STOP}
 
 # /safety_image 토픽 최신 프레임 (JPEG bytes)
 _safety_lock = threading.Lock()
@@ -59,6 +87,54 @@ system_state = {
 _cycle_flags = {
     "task_complete": False,   # /dsr01/task_complete 한 번이라도 수신했나
 }
+
+# ── Safety mode 상태머신 ──
+# mode: "NORMAL" | "SAFETY_PAUSE" | "EMERGENCY"
+# source: "VISION" | "COLLISION" | "BUTTON" | "EMERGENCY_STATE" | None
+# countdown_end: 복귀 카운트다운 종료 epoch (None이면 카운트다운 중 아님)
+safety_mode_state = {
+    "mode": "NORMAL",
+    "source": None,
+    "countdown_end": None,
+    "last_alert": "CLEAR",
+    "last_robot_state": -1,
+    "message": "",
+}
+_safety_lock_mode = threading.Lock()
+# 2초 윈도우 내의 (timestamp, raw_state) 튜플 큐
+_safety_frame_log: deque = deque()
+
+def _count_recent_frames(state: str) -> int:
+    now = time.time()
+    while _safety_frame_log and now - _safety_frame_log[0][0] > SAFETY_FRAME_WINDOW_SEC:
+        _safety_frame_log.popleft()
+    return sum(1 for _, s in _safety_frame_log if s == state)
+
+def _set_safety_mode(mode: str, source: str | None, message: str = ""):
+    """안전모드 전환 + 로그 + 로봇측 PAUSE/RESUME 명령 송출.
+    호출자는 _safety_lock_mode를 이미 잡고 있어야 함."""
+    prev = safety_mode_state["mode"]
+    safety_mode_state["mode"] = mode
+    safety_mode_state["source"] = source
+    safety_mode_state["message"] = message
+    if mode == "NORMAL":
+        safety_mode_state["countdown_end"] = None
+    if prev != mode:
+        add_log("SAFETY", f"{prev} → {mode} (source={source}) {message}", "INFO")
+        # 로봇 측에 paused 플래그 알림 (외력 체크/그리퍼 동작 차단)
+        if ros_node is not None:
+            if mode == "NORMAL":
+                ros_node.publish_safety_cmd("RESUME")
+            else:  # SAFETY_PAUSE / EMERGENCY
+                ros_node.publish_safety_cmd("PAUSE")
+                
+        # Firebase 상태 동기화 (Kiosk 통보용)
+        def _fb_sync():
+            try:
+                requests.put(f"{FIREBASE_BASE}/safety_mode.json", json={"mode": mode, "message": message}, timeout=2)
+            except:
+                pass
+        threading.Thread(target=_fb_sync, daemon=True).start()
 
 def fb_get(url):
     try:
@@ -128,7 +204,113 @@ class DashboardNode(Node):
         # Safety zone update publisher (safety_monitor가 /safety_zone_update 구독)
         self.pub_safety_zone = self.create_publisher(String, '/safety_zone_update', 10)
 
+        # ── Safety mode 관련 ─────────────────────────────────────────────
+        # safety_monitor 프레임별 raw state
+        self.sub_safety_state = self.create_subscription(
+            String, '/safety_state', self.safety_state_callback, 30)
+        # 상태 전이 (히스테리시스 후) - 로그용
+        self.sub_safety_alert = self.create_subscription(
+            String, '/safety_alert', self.safety_alert_callback, 10)
+        # 로봇 측에 명령 송출 (RESET_HOME 특수 시퀀스 등)
+        self.pub_safety_cmd = self.create_publisher(
+            String, f'/{ROBOT_ID}/safety_cmd', 10)
+
+        # Doosan 서비스 클라이언트
+        self.cli_pause   = None
+        self.cli_resume  = None
+        self.cli_stop    = None
+        self.cli_state   = None
+        self.cli_safereset = None
+        if _DSR_SRV_OK:
+            self.cli_pause     = self.create_client(MovePause,         f'/{ROBOT_ID}/motion/move_pause')
+            self.cli_resume    = self.create_client(MoveResume,        f'/{ROBOT_ID}/motion/move_resume')
+            self.cli_stop      = self.create_client(MoveStop,          f'/{ROBOT_ID}/motion/move_stop')
+            self.cli_state     = self.create_client(GetRobotState,     f'/{ROBOT_ID}/system/get_robot_state')
+            self.cli_safereset = self.create_client(SetSafeStopResetType, f'/{ROBOT_ID}/system/set_safe_stop_reset_type')
+
         self.latest_frame = None
+
+    # ── Safety monitor callbacks ────────────────────────────────────────
+
+    def safety_state_callback(self, msg: String):
+        """프레임마다 raw 상태 수신 → 2s 윈도우에 누적 + 모드 전이 판단."""
+        state = msg.data
+        now = time.time()
+        with _safety_lock_mode:
+            _safety_frame_log.append((now, state))
+            # window 밖 정리
+            while _safety_frame_log and now - _safety_frame_log[0][0] > SAFETY_FRAME_WINDOW_SEC:
+                _safety_frame_log.popleft()
+            self._evaluate_safety_transitions(reason="vision")
+
+    def safety_alert_callback(self, msg: String):
+        """히스테리시스 확정 상태 (전이 시점) - 로그용으로만 사용."""
+        with _safety_lock_mode:
+            safety_mode_state["last_alert"] = msg.data
+
+    def _evaluate_safety_transitions(self, reason: str = ""):
+        """safety_lock_mode를 이미 잡은 상태에서 호출. 카운트 기반 자동 전이만 처리."""
+        mode = safety_mode_state["mode"]
+        stop_n  = sum(1 for _, s in _safety_frame_log if s == "STOP")
+        clear_n = sum(1 for _, s in _safety_frame_log if s == "CLEAR")
+
+        if mode == "NORMAL":
+            # vision 기반 STOP 누적 → SAFETY_PAUSE
+            if stop_n >= SAFETY_FRAME_THRESHOLD:
+                _set_safety_mode("SAFETY_PAUSE", "VISION",
+                                 f"STOP {stop_n}/{SAFETY_FRAME_THRESHOLD}f in {SAFETY_FRAME_WINDOW_SEC}s")
+                self._call_pause()
+        elif mode == "SAFETY_PAUSE":
+            # vision이 CLEAR로 안정되면 카운트다운 시작 (이미 진행 중이면 그대로 둔다)
+            if clear_n >= SAFETY_FRAME_THRESHOLD and safety_mode_state["countdown_end"] is None:
+                safety_mode_state["countdown_end"] = time.time() + RESUME_COUNTDOWN_SEC
+                add_log("SAFETY", f"CLEAR 안정화 → {int(RESUME_COUNTDOWN_SEC)}s 후 재개", "INFO")
+            # 카운트다운 도중 다시 STOP가 들어오면 카운트다운 취소
+            if stop_n >= SAFETY_FRAME_THRESHOLD and safety_mode_state["countdown_end"] is not None:
+                safety_mode_state["countdown_end"] = None
+                add_log("SAFETY", "재개 카운트다운 취소 (STOP 재감지)", "WARN")
+
+    # ── Doosan service helpers ──────────────────────────────────────────
+
+    def _call_pause(self):
+        if not self.cli_pause:
+            return
+        if not self.cli_pause.wait_for_service(timeout_sec=0.2):
+            self.get_logger().warn("move_pause 서비스 없음")
+            return
+        self.cli_pause.call_async(MovePause.Request())
+
+    def _call_resume(self):
+        if not self.cli_resume:
+            return
+        if not self.cli_resume.wait_for_service(timeout_sec=0.2):
+            self.get_logger().warn("move_resume 서비스 없음")
+            return
+        self.cli_resume.call_async(MoveResume.Request())
+
+    def _call_stop(self, mode_int: int = 0):
+        if not self.cli_stop:
+            return
+        if not self.cli_stop.wait_for_service(timeout_sec=0.2):
+            self.get_logger().warn("move_stop 서비스 없음")
+            return
+        req = MoveStop.Request(); req.stop_mode = mode_int
+        self.cli_stop.call_async(req)
+
+    def _call_safe_stop_reset(self, reset_type: int = 1):
+        """0=PROGRAM_STOP, 1=PROGRAM_RESUME"""
+        if not self.cli_safereset:
+            return
+        if not self.cli_safereset.wait_for_service(timeout_sec=0.2):
+            return
+        req = SetSafeStopResetType.Request(); req.reset_type = reset_type
+        self.cli_safereset.call_async(req)
+
+    def publish_safety_cmd(self, cmd: str, payload: dict | None = None):
+        msg = String()
+        msg.data = json.dumps({"cmd": cmd, "payload": payload or {}})
+        self.pub_safety_cmd.publish(msg)
+        add_log("SAFETY", f"robot cmd: {cmd}", "INFO")
 
     def publish_safety_zone(self, polygon_px: list):
         """폴리곤 픽셀 좌표(소스 이미지 기준)를 safety_monitor에 전달."""
@@ -186,11 +368,96 @@ class DashboardNode(Node):
             # Skip some very noisy system logs if desired, but for now we show all
             add_log(cat, msg.msg, level_str)
 
-    def trigger_estop(self):
+    def trigger_estop(self, source: str = "BUTTON"):
+        """
+        대시보드 비상정지 버튼 → EMERGENCY 모드. '재개' 옵션이 있으므로 hard stop이
+        아닌 move_pause로 처리한다 (motion controller에 일시정지 신호).
+        충돌로 인한 EMERGENCY_STATE인 경우 로봇은 이미 정지 상태라 추가 호출 불필요.
+        """
         msg = String()
         msg.data = "STOP"
         self.pub_estop.publish(msg)
-        add_log("SAFETY", "EMERGENCY STOP TRIGGERED", "")
+        if source == "BUTTON":
+            self._call_pause()
+        with _safety_lock_mode:
+            _set_safety_mode("EMERGENCY", source, "비상정지 활성화")
+            safety_mode_state["countdown_end"] = None
+        add_log("SAFETY", f"EMERGENCY STOP ({source})", "")
+
+    def request_resume_from_emergency(self):
+        """비상정지 → '재개'. 5초 카운트다운 후 motion resume."""
+        with _safety_lock_mode:
+            if safety_mode_state["mode"] != "EMERGENCY":
+                return False
+            safety_mode_state["countdown_end"] = time.time() + RESUME_COUNTDOWN_SEC
+            add_log("SAFETY", f"EMERGENCY 재개 카운트다운 시작 ({int(RESUME_COUNTDOWN_SEC)}s)", "INFO")
+            return True
+
+    def request_reset_home(self):
+        """비상정지 → '처음으로'. 클라우드 리셋 + 로봇 측 RESET_HOME 시퀀스 트리거.
+        주의: 비상정지에서 motion controller가 paused 상태이므로 먼저 풀어줘야
+        movel/movej가 동작한다."""
+        # 1) 충돌로 인한 EMERGENCY였다면 safe-stop 복구
+        with _safety_lock_mode:
+            src = safety_mode_state["source"]
+        if src == "EMERGENCY_STATE":
+            self._call_safe_stop_reset(1)  # PROGRAM_RESUME
+            time.sleep(0.2)
+        # 2) motion controller pause 해제
+        self._call_resume()
+        time.sleep(0.2)
+        # 3) Firebase 플래그 리셋
+        reset_all_firebase_flags()
+        # 4) 로봇 측에 RESET_HOME 명령 발행 (paused flag 해제 + reset_home_event 세팅)
+        self.publish_safety_cmd("RESET_HOME")
+        with _safety_lock_mode:
+            _set_safety_mode("NORMAL", None, "RESET_HOME 발행 - 로봇 복귀 진행")
+        return True
+
+    # ── 주기 처리: get_robot_state 폴링 + 카운트다운 만료 ─────────────────
+
+    def poll_robot_state_and_countdown(self):
+        """0.5s 주기로 robot_state를 폴링하고, 카운트다운 만료를 확인."""
+        # robot_state 확인 (비동기 future)
+        if self.cli_state and self.cli_state.wait_for_service(timeout_sec=0.05):
+            fut = self.cli_state.call_async(GetRobotState.Request())
+            fut.add_done_callback(self._on_robot_state_resp)
+
+        # countdown 만료 처리
+        with _safety_lock_mode:
+            end = safety_mode_state["countdown_end"]
+            mode = safety_mode_state["mode"]
+            if end is not None and time.time() >= end:
+                # 카운트다운 완료
+                safety_mode_state["countdown_end"] = None
+                if mode == "SAFETY_PAUSE":
+                    self._call_resume()
+                    _set_safety_mode("NORMAL", None, "안전정지 해제 - resume")
+                elif mode == "EMERGENCY":
+                    # 충돌로 인한 EMERGENCY였다면 safe stop reset도 필요
+                    if safety_mode_state["source"] == "EMERGENCY_STATE":
+                        self._call_safe_stop_reset(1)  # PROGRAM_RESUME
+                    self._call_resume()
+                    _set_safety_mode("NORMAL", None, "비상정지 해제 - resume")
+
+    def _on_robot_state_resp(self, future):
+        try:
+            res = future.result()
+            if res is None:
+                return
+            st = int(res.robot_state)
+        except Exception:
+            return
+        with _safety_lock_mode:
+            safety_mode_state["last_robot_state"] = st
+            mode = safety_mode_state["mode"]
+            if mode == "NORMAL":
+                if st in COLLISION_EMERGENCY_STATES:
+                    _set_safety_mode("EMERGENCY", "EMERGENCY_STATE",
+                                     f"robot_state={st} (EMERGENCY_STOP)")
+                elif st in COLLISION_SAFE_STOP_STATES:
+                    _set_safety_mode("SAFETY_PAUSE", "COLLISION",
+                                     f"robot_state={st} (SAFE_STOP)")
 
 ros_node = None
 
@@ -201,6 +468,40 @@ def ros_spin_thread():
     rclpy.spin(ros_node)
     ros_node.destroy_node()
     rclpy.shutdown()
+
+def safety_supervisor_thread():
+    """0.5s 주기로 robot_state 폴링 + 카운트다운 만료 체크."""
+    while True:
+        try:
+            if ros_node is not None:
+                ros_node.poll_robot_state_and_countdown()
+        except Exception:
+            pass
+        time.sleep(ROBOT_STATE_POLL_SEC)
+
+# ── kiosk와 동일한 Firebase 리셋 (클라우드 리셋) ────────────────────────────
+def reset_all_firebase_flags():
+    base = FIREBASE_BASE
+    payload = [
+        (f"{base}/start.json",    False),
+        (f"{base}/end.json",      False),
+        (f"{base}/voice_ok.json", False),
+        (f"{base}/concept.json",  ""),
+        (f"{base}/capture.json",  False),
+        (f"{base}/tool.json", {"black": False, "crown": False, "gun": False,
+                               "hat": False, "pink": False, "wand": False}),
+        (f"{base}/safety_mode.json", {"mode": "NORMAL", "message": ""}),
+    ]
+    ok = True
+    for url, body in payload:
+        try:
+            requests.put(url, json=body, timeout=2)
+        except Exception:
+            ok = False
+    # 로컬 사이클 플래그도 초기화
+    _cycle_flags["task_complete"] = False
+    add_log("SAFETY", f"클라우드 리셋 {'완료' if ok else '일부 실패'}", "INFO")
+    return ok
 
 def derive_stage(db_full: dict) -> str:
     """Firebase 상태 + task_complete 플래그로 4단계 stage 추론."""
@@ -334,7 +635,37 @@ def video_feed():
 
 @app.route('/api/telemetry')
 def get_telemetry():
-    return jsonify(system_state)
+    # safety_mode 스냅샷 + countdown 남은 시간(초) 계산
+    with _safety_lock_mode:
+        end = safety_mode_state["countdown_end"]
+        remaining = max(0.0, end - time.time()) if end else 0.0
+        sm = {
+            "mode":      safety_mode_state["mode"],
+            "source":    safety_mode_state["source"],
+            "message":   safety_mode_state["message"],
+            "countdown": round(remaining, 1),
+            "last_alert":        safety_mode_state["last_alert"],
+            "last_robot_state":  safety_mode_state["last_robot_state"],
+        }
+    payload = dict(system_state)
+    payload["safety_mode"] = sm
+    return jsonify(payload)
+
+@app.route('/api/safety/resume', methods=['POST'])
+def safety_resume():
+    """EMERGENCY 모드에서 '재개' 버튼."""
+    if not ros_node:
+        return jsonify({"ok": False, "error": "ROS node not running"}), 503
+    ok = ros_node.request_resume_from_emergency()
+    return jsonify({"ok": ok})
+
+@app.route('/api/safety/reset_home', methods=['POST'])
+def safety_reset_home():
+    """EMERGENCY 모드에서 '처음으로' 버튼."""
+    if not ros_node:
+        return jsonify({"ok": False, "error": "ROS node not running"}), 503
+    ok = ros_node.request_reset_home()
+    return jsonify({"ok": ok})
 
 @app.route('/api/logs/clear', methods=['POST'])
 def clear_logs():
@@ -371,9 +702,18 @@ def safety_zone():
 if __name__ == '__main__':
     # Start ROS2 thread
     threading.Thread(target=ros_spin_thread, daemon=True).start()
-    
+
+    # Wait briefly for ros_node to be initialized
+    for _ in range(20):
+        if ros_node is not None:
+            break
+        time.sleep(0.1)
+
     # Start Firebase Polling thread
     threading.Thread(target=fb_poll_thread, daemon=True).start()
-    
+
+    # Start safety supervisor (robot_state poll + countdown)
+    threading.Thread(target=safety_supervisor_thread, daemon=True).start()
+
     # Start Flask
     app.run(host='0.0.0.0', port=5001, debug=False, threaded=True)

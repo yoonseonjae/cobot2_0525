@@ -57,6 +57,9 @@ async function fetchTelemetry() {
         document.getElementById('j5-val').innerText = data.joints.j5.toFixed(1) + '°';
         document.getElementById('j6-val').innerText = data.joints.j6.toFixed(1) + '°';
 
+        // Update Safety Mode banner
+        renderSafetyBanner(data.safety_mode);
+
         // Update Logs
         renderLogs(data.logs);
 
@@ -197,12 +200,68 @@ setInterval(fetchTelemetry, 500);
 // Emergency Stop Button
 document.getElementById('estop-btn').addEventListener('click', async () => {
     try {
-        const res = await fetch('/api/estop', { method: 'POST' });
-        const data = await res.json();
-        alert(data.status);
+        await fetch('/api/estop', { method: 'POST' });
     } catch (e) {
-        alert("Failed to trigger E-STOP");
+        console.warn("Failed to trigger E-STOP", e);
     }
+});
+
+// ── Safety Mode Banner rendering ───────────────────────────────────────
+function renderSafetyBanner(sm) {
+    const banner = document.getElementById('safety-banner');
+    if (!banner || !sm) return;
+    const title   = document.getElementById('safety-banner-title');
+    const sub     = document.getElementById('safety-banner-sub');
+    const timer   = document.getElementById('safety-banner-timer');
+    const actions = document.getElementById('safety-banner-actions');
+
+    if (sm.mode === 'NORMAL') {
+        banner.classList.add('hidden');
+        banner.classList.remove('pause', 'emerg');
+        return;
+    }
+    banner.classList.remove('hidden');
+
+    if (sm.mode === 'SAFETY_PAUSE') {
+        banner.classList.add('pause');
+        banner.classList.remove('emerg');
+        title.innerText = '안전정지모드';
+        const srcLabel = sm.source === 'COLLISION' ? '로봇 접촉(노란불)' :
+                         sm.source === 'VISION'    ? '안전구역 침범 감지' : (sm.source || '');
+        sub.innerText = `${srcLabel} · ${sm.message || ''}`;
+        actions.classList.add('hidden');
+        if (sm.countdown > 0) {
+            timer.classList.remove('hidden');
+            timer.innerText = `복귀까지 ${sm.countdown.toFixed(1)}s`;
+        } else {
+            timer.classList.add('hidden');
+        }
+    } else if (sm.mode === 'EMERGENCY') {
+        banner.classList.add('emerg');
+        banner.classList.remove('pause');
+        title.innerText = '비상정지모드';
+        const srcLabel = sm.source === 'EMERGENCY_STATE' ? '로봇 충돌(빨간불)' :
+                         sm.source === 'BUTTON'          ? '대시보드 비상정지 버튼' : (sm.source || '');
+        sub.innerText = `${srcLabel} · ${sm.message || ''}`;
+        if (sm.countdown > 0) {
+            timer.classList.remove('hidden');
+            timer.innerText = `복귀까지 ${sm.countdown.toFixed(1)}s`;
+            actions.classList.add('hidden');   // 카운트다운 중에는 버튼 숨김
+        } else {
+            timer.classList.add('hidden');
+            actions.classList.remove('hidden');
+        }
+    }
+}
+
+document.getElementById('safety-resume-btn').addEventListener('click', async () => {
+    try { await fetch('/api/safety/resume', { method: 'POST' }); }
+    catch (e) { console.warn(e); }
+});
+document.getElementById('safety-home-btn').addEventListener('click', async () => {
+    if (!confirm('처음으로 돌아갑니다. 로봇이 홈으로 이동하고 클라우드가 리셋됩니다. 진행할까요?')) return;
+    try { await fetch('/api/safety/reset_home', { method: 'POST' }); }
+    catch (e) { console.warn(e); }
 });
 
 // ─── Safety Zone Drawing ─────────────────────────────────────────────────

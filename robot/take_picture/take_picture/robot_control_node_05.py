@@ -1,6 +1,7 @@
 import sys
 import os
 import time
+import json
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String, Bool
@@ -40,6 +41,13 @@ class RobotControlNode(Node):
             10
         )
         
+        self.sub_safety = self.create_subscription(
+            String,
+            f"/{ROBOT_ID}/safety_cmd",
+            self.safety_callback,
+            10
+        )
+        
         # 💡 작업 완료 신호 구독
         self.task_completed = False
         self.task_sub = self.create_subscription(
@@ -54,6 +62,17 @@ class RobotControlNode(Node):
         if msg.data and not self.task_completed:
             self.task_completed = True
             self.get_logger().info("🚀 픽앤플레이스 완료 트리거 수신! 로봇 제어권을 인계받습니다.")
+
+    def safety_callback(self, msg):
+        try:
+            data = json.loads(msg.data)
+            cmd = data.get('cmd', '')
+        except Exception:
+            cmd = msg.data.strip()
+            
+        if cmd == 'RESET_HOME':
+            self.get_logger().warn("🚨 안전 명령 RESET_HOME 수신! 홈으로 강제 복귀합니다.")
+            self.current_command = "RESET_HOME"
 
     def gesture_callback(self, msg):
         command = msg.data
@@ -162,8 +181,18 @@ def main(args=None):
             
             # 찰나의 순간에 새로운 명령이 접수되었다면?
             if node.current_command:
-                # 로봇을 이동시킵니다!
-                node.execute_movement(node.current_command)
+                if node.current_command == "RESET_HOME":
+                    node.current_command = None
+                    node.get_logger().info("✅ RESET_HOME 실행: HOME 위치로 이동합니다.")
+                    try:
+                        HOME_POS = [0, 0, 90, 0, 90, 0] 
+                        node.dsr_movej(HOME_POS, vel=60, acc=60)
+                    except Exception as e:
+                        node.get_logger().error(f"❌ HOME 복귀 중 예외 발생 (PAUSE 상태일 수 있음): {e}")
+                    break
+                else:
+                    # 로봇을 이동시킵니다!
+                    node.execute_movement(node.current_command)
                 
     except KeyboardInterrupt:
         node.get_logger().info("프로그램을 종료합니다.")
