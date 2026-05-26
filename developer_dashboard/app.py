@@ -127,14 +127,6 @@ def _set_safety_mode(mode: str, source: str | None, message: str = ""):
                 ros_node.publish_safety_cmd("RESUME")
             else:  # SAFETY_PAUSE / EMERGENCY
                 ros_node.publish_safety_cmd("PAUSE")
-                
-        # Firebase 상태 동기화 (Kiosk 통보용)
-        def _fb_sync():
-            try:
-                requests.put(f"{FIREBASE_BASE}/safety_mode.json", json={"mode": mode, "message": message}, timeout=2)
-            except:
-                pass
-        threading.Thread(target=_fb_sync, daemon=True).start()
 
 def fb_get(url):
     try:
@@ -490,7 +482,6 @@ def reset_all_firebase_flags():
         (f"{base}/capture.json",  False),
         (f"{base}/tool.json", {"black": False, "crown": False, "gun": False,
                                "hat": False, "pink": False, "wand": False}),
-        (f"{base}/safety_mode.json", {"mode": "NORMAL", "message": ""}),
     ]
     ok = True
     for url, body in payload:

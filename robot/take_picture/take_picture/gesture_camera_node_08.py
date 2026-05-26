@@ -6,7 +6,6 @@ import mediapipe as mp
 import sys
 import os
 import threading
-import json
 from flask import Flask, Response
 from flask_cors import CORS
 
@@ -148,10 +147,6 @@ class GestureCameraNode(Node):
         self.task_completed = False
         self.task_sub = self.create_subscription(Bool, f"/{ROBOT_ID}/task_complete", self.task_callback, 10)
         
-        # 안전 명령 구독 (PAUSE 시 제스처 무시)
-        self.paused = False
-        self.safety_sub = self.create_subscription(String, f"/{ROBOT_ID}/safety_cmd", self.safety_callback, 10)
-        
         # 변수 초기화
         self.mp_hands = mp.solutions.hands
         self.mp_draw = mp.solutions.drawing_utils
@@ -178,18 +173,6 @@ class GestureCameraNode(Node):
         if msg.data and not self.task_completed:
             self.task_completed = True
             self.get_logger().info("🚀 작업 완료 신호 수신! 제스처 카메라 분석을 시작합니다.")
-
-    def safety_callback(self, msg: String):
-        try:
-            data = json.loads(msg.data)
-            cmd = data.get('cmd', '')
-        except Exception:
-            cmd = msg.data.strip()
-            
-        if cmd == 'PAUSE':
-            self.paused = True
-        elif cmd in ('RESUME', 'RESET_HOME'):
-            self.paused = False
 
     def _depth_cb(self, msg: Image):
         self.latest_depth_msg = msg
@@ -224,12 +207,7 @@ class GestureCameraNode(Node):
         save_frame = frame.copy()
         
         ch, cw = frame.shape[:2]
-        
-        if self.paused:
-            result = type('DummyResult', (object,), {'multi_hand_landmarks': None})()
-            cv2.putText(frame, "PAUSED", (50, 80), cv2.FONT_HERSHEY_DUPLEX, 1.5, (0, 0, 255), 3)
-        else:
-            result = self.hands.process(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+        result = self.hands.process(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
         
         command_to_send = None
         active_icons = []
