@@ -47,9 +47,32 @@
                     </div>
                 </div>
 
-                <div class="card state-card">
-                    <h3>CURRENT STATE</h3>
-                    <div class="state-value" id="current-state-text">ACTIVE / CAPTURING</div>
+                <div class="card stage-card">
+                    <div class="stage-header">
+                        <h3>CURRENT STAGE</h3>
+                        <span class="stage-status" id="stage-status-text">대기</span>
+                    </div>
+                    <div class="stage-pipeline" id="stage-pipeline">
+                        <div class="stage-step" data-stage="RECOGNIZE">
+                            <div class="stage-dot">1</div>
+                            <div class="stage-label">인식</div>
+                        </div>
+                        <div class="stage-connector"></div>
+                        <div class="stage-step" data-stage="PICKUP">
+                            <div class="stage-dot">2</div>
+                            <div class="stage-label">픽업</div>
+                        </div>
+                        <div class="stage-connector"></div>
+                        <div class="stage-step" data-stage="CAPTURE">
+                            <div class="stage-dot">3</div>
+                            <div class="stage-label">촬영</div>
+                        </div>
+                        <div class="stage-connector"></div>
+                        <div class="stage-step" data-stage="COMPLETE">
+                            <div class="stage-dot">4</div>
+                            <div class="stage-label">완료</div>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="card joints-card">
@@ -102,23 +125,19 @@
                 <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center;">
                     <div>
                         <h2>LIVE CAMERA FEED - SAFETY ZONE</h2>
-                        <span class="subtitle">Live High-Quality USB Camera Video</span>
+                        <span class="subtitle">/safety_image (ROS) — click to draw safety zone</span>
                     </div>
-                    <div style="display: flex; align-items: center; gap: 0.5rem;">
-                        <span style="font-size: 0.8rem; color: var(--text-secondary);">CAM ID:</span>
-                        <select id="cam-select" style="background: var(--card-bg); color: var(--neon-blue); border: 1px solid var(--neon-blue); border-radius: 4px; padding: 0.3rem; outline: none; cursor: pointer;">
-                            <option value="0">/dev/video0</option>
-                            <option value="1">/dev/video1</option>
-                            <option value="2">/dev/video2</option>
-                            <option value="4">/dev/video4</option>
-                            <option value="6">/dev/video6</option>
-                        </select>
+                    <div class="zone-controls">
+                        <button class="zone-btn" id="zone-draw-btn">DRAW ZONE</button>
+                        <button class="zone-btn zone-btn-confirm" id="zone-confirm-btn" disabled>CONFIRM</button>
+                        <button class="zone-btn zone-btn-clear" id="zone-clear-btn">CLEAR</button>
                     </div>
                 </div>
-                <div class="video-container">
-                    <img src="{{ url_for('video_feed') }}?cam=0" alt="Live Feed" class="video-stream" id="main-video-stream">
+                <div class="video-container" id="video-container">
+                    <img src="{{ url_for('video_feed') }}" alt="Live Feed" class="video-stream" id="main-video-stream">
+                    <canvas id="zone-canvas" class="zone-overlay"></canvas>
                     <div class="video-overlay">
-                        <span class="overlay-text left">ACTIVE ZONE: CLEAR</span>
+                        <span class="overlay-text left" id="zone-status">CLICK 'DRAW ZONE' TO START</span>
                         <span class="overlay-text right" id="clock">2024-05-20 14:15:22</span>
                     </div>
                 </div>
@@ -126,11 +145,14 @@
 
             <!-- Right Panel: AI Logs -->
             <aside class="panel logs-panel">
-                <div class="panel-header">
-                    <h2>AI LOGS</h2>
-                    <span class="subtitle">Real-Time Feed</span>
+                <div class="panel-header logs-header">
+                    <div>
+                        <h2>AI LOGS</h2>
+                        <span class="subtitle">Real-Time Feed</span>
+                    </div>
+                    <button class="logs-clear-btn" id="logs-clear-btn" title="모든 로그 삭제">CLEAR</button>
                 </div>
-                
+
                 <div class="logs-container" id="logs-container">
                     <!-- Logs will be injected here via JS -->
                 </div>

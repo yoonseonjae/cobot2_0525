@@ -5,7 +5,7 @@ import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String, Bool
 
-sys.path.append(os.path.expanduser('~/cobot_ws/tonghap'))
+sys.path.append(os.path.expanduser('~/cobot2_0525/robot'))
 try:
     from firebase_client import get_node
 except ImportError:

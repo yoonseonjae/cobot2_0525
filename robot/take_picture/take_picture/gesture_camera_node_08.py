@@ -9,7 +9,7 @@ import threading
 from flask import Flask, Response
 from flask_cors import CORS
 
-sys.path.append(os.path.expanduser('~/cobot_ws/tonghap'))
+sys.path.append(os.path.expanduser('~/cobot2_0525/robot'))
 try:
     from firebase_client import get_local_ip, update_node
 except ImportError:

@@ -159,6 +159,98 @@ body {
     font-weight: 600;
 }
 
+/* ── CURRENT STAGE 파이프라인 ── */
+.stage-pipeline {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 0.6rem;
+}
+.stage-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.3rem;
+    flex: 0 0 auto;
+    min-width: 0;
+}
+.stage-dot {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 2px solid rgba(255,255,255,0.2);
+    background: rgba(255,255,255,0.05);
+    color: rgba(255,255,255,0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.85rem;
+    transition: all 0.25s ease;
+}
+.stage-label {
+    font-size: 0.7rem;
+    color: rgba(255,255,255,0.4);
+    transition: color 0.25s ease;
+}
+.stage-connector {
+    flex: 1;
+    height: 2px;
+    background: rgba(255,255,255,0.1);
+    margin: 0 0.3rem;
+    margin-bottom: 1rem;  /* dot 중앙 정렬용 보정 */
+    transition: background 0.25s ease;
+}
+
+/* 지난 단계 = 완료 */
+.stage-step.done .stage-dot {
+    border-color: var(--neon-green);
+    background: rgba(0, 255, 136, 0.15);
+    color: var(--neon-green);
+}
+.stage-step.done .stage-label {
+    color: var(--neon-green);
+}
+.stage-connector.done {
+    background: var(--neon-green);
+}
+
+/* 현재 단계 = 활성 (글로우) */
+.stage-step.active .stage-dot {
+    border-color: var(--neon-blue);
+    background: rgba(0, 210, 255, 0.25);
+    color: #fff;
+    box-shadow: 0 0 14px var(--neon-blue), inset 0 0 8px rgba(0, 210, 255, 0.4);
+    animation: stage-pulse 1.6s ease-in-out infinite;
+}
+.stage-step.active .stage-label {
+    color: var(--neon-blue);
+    font-weight: 700;
+}
+@keyframes stage-pulse {
+    0%, 100% { box-shadow: 0 0 14px var(--neon-blue), inset 0 0 8px rgba(0, 210, 255, 0.4); }
+    50%      { box-shadow: 0 0 22px var(--neon-blue), inset 0 0 12px rgba(0, 210, 255, 0.6); }
+}
+
+.stage-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+.stage-header h3 {
+    margin: 0;
+}
+.stage-status {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    letter-spacing: 0.05em;
+    font-weight: 700;
+}
+.stage-status.complete { color: var(--neon-green); }
+.stage-status.active   { color: var(--neon-blue); }
+
+
 .joints-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -223,6 +315,7 @@ body {
     display: flex;
     justify-content: space-between;
     background: linear-gradient(to top, rgba(0,0,0,0.8), transparent);
+    pointer-events: none;  /* 그 아래 zone-canvas 클릭이 도달하도록 */
 }
 
 .overlay-text {
@@ -231,12 +324,101 @@ body {
     font-size: 0.9rem;
 }
 
+/* Safety Zone drawing overlay */
+.zone-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+}
+.zone-overlay.drawing {
+    pointer-events: auto;
+    cursor: crosshair;
+}
+
+.zone-controls {
+    display: flex;
+    gap: 0.4rem;
+}
+.zone-btn {
+    background: var(--card-bg);
+    color: var(--neon-blue);
+    border: 1px solid var(--neon-blue);
+    border-radius: 4px;
+    padding: 0.35rem 0.75rem;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    font-family: inherit;
+}
+.zone-btn:hover:not(:disabled) {
+    background: rgba(0, 210, 255, 0.15);
+}
+.zone-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+.zone-btn-confirm {
+    color: var(--neon-green);
+    border-color: var(--neon-green);
+}
+.zone-btn-confirm:hover:not(:disabled) {
+    background: rgba(0, 255, 136, 0.15);
+}
+.zone-btn-clear {
+    color: #ff6060;
+    border-color: #ff6060;
+}
+.zone-btn-clear:hover:not(:disabled) {
+    background: rgba(255, 96, 96, 0.15);
+}
+
 /* Right Panel: Logs */
 .logs-panel {
     flex: 0 0 350px;
     display: flex;
     flex-direction: column;
 }
+
+.logs-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 0.5rem;
+}
+.logs-clear-btn {
+    background: transparent;
+    color: #ff6060;
+    border: 1px solid #ff6060;
+    border-radius: 4px;
+    padding: 0.3rem 0.6rem;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.15s ease;
+}
+.logs-clear-btn:hover {
+    background: rgba(255, 96, 96, 0.15);
+}
+.logs-clear-btn:active {
+    background: rgba(255, 96, 96, 0.3);
+}
+
+/* 휴대폰 탭 닫기 — 카드가 우측으로 스와이프 + 페이드 */
+@keyframes log-swipe-out {
+    0%   { transform: translateX(0)     scale(1);    opacity: 1; }
+    100% { transform: translateX(120%)  scale(0.95); opacity: 0; }
+}
+.log-card.swiping {
+    animation: log-swipe-out 0.32s cubic-bezier(0.55, 0.08, 0.68, 0.53) forwards;
+    pointer-events: none;
+}
+/* 폴링이 즉시 빈 배열로 덮어쓰지 않도록 그냥 클래스만 부여 */
 
 .logs-container {
     flex: 1;

@@ -19,7 +19,7 @@ from voice_processing.MicController import MicController, MicConfig
 from voice_processing.wakeup_word import WakeupWord
 from voice_processing.stt import STT
 
-sys.path.append("/home/jeyu/cobot_ws/tonghap")
+sys.path.append(os.path.expanduser('~/cobot2_0525/robot'))
 try:
     from firebase_client import update_node
 except ImportError as e:

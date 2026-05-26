@@ -18,7 +18,7 @@ except ImportError:
     from onrobot import RG
 
 # Firebase 클라이언트 임포트
-sys.path.append(os.path.expanduser('~/cobot_ws/tonghap'))
+sys.path.append(os.path.expanduser('~/cobot2_0525/robot'))
 try:
     from firebase_client import get_node, update_node, patch_node
 except ImportError:

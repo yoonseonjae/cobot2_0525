@@ -107,12 +107,7 @@ class SafetyMonitor(Node):
             self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
             self.get_logger().info(f"[SafetyMonitor] 카메라 {self.cam_idx} 오픈")
 
-        # ── 드로잉 상태 ──
-        self._drawing     = False
-        self._draw_points = []
-        self._local_win   = "SafetyMonitor (D=draw zone  C=clear  Q=quit)"
-
-        # ── 캡처 스레드 ──
+        # ── 캡처 스레드 (유일한 카메라 reader. zone 설정은 developer_dashboard에서) ──
         self._running = True
         self._thread  = threading.Thread(target=self._capture_loop, daemon=True)
         self._thread.start()
@@ -167,22 +162,27 @@ class SafetyMonitor(Node):
         interval = 1.0 / self.fps
         while self._running and rclpy.ok():
             t0 = time.time()
-            if not self.cap.isOpened():
-                time.sleep(0.5)
-                continue
-            ret, frame = self.cap.read()
-            if not ret:
-                time.sleep(0.05)
-                continue
-
-            annotated, state = self._process_frame(frame)
-            self._update_state(state)
-
             try:
-                img_msg = self.bridge.cv2_to_imgmsg(annotated, encoding='bgr8')
-                self.image_pub.publish(img_msg)
-            except Exception:
-                pass
+                if not self.cap.isOpened():
+                    time.sleep(0.5)
+                    continue
+                ret, frame = self.cap.read()
+                if not ret:
+                    time.sleep(0.05)
+                    continue
+
+                annotated, state = self._process_frame(frame)
+                self._update_state(state)
+
+                try:
+                    img_msg = self.bridge.cv2_to_imgmsg(annotated, encoding='bgr8')
+                    self.image_pub.publish(img_msg)
+                except Exception:
+                    pass
+            except Exception as e:
+                # 한 프레임 처리 실패가 스레드 전체를 죽이지 않도록 방어
+                self.get_logger().warn(f"[SafetyMonitor] frame loop error (continuing): {e}")
+                time.sleep(0.1)
 
             elapsed = time.time() - t0
             if elapsed < interval:
@@ -375,63 +375,16 @@ class SafetyMonitor(Node):
             self.alert_pub.publish(msg)
             self._last_pub_state = self.current_state
 
-            log_fn = (self.get_logger().info  if self.current_state == "CLEAR"
-                      else self.get_logger().warn if self.current_state == "WARN"
-                      else self.get_logger().error)
-            log_fn(f"[SafetyMonitor] {prev} → {self.current_state} "
-                   f"(dist={int(self._last_distance)}px mode={self._last_mode})")
-
-    # ── 로컬 OpenCV 창 ────────────────────────────────────────────────────────
-
-    def show_local_window(self):
-        cv2.namedWindow(self._local_win, cv2.WINDOW_NORMAL)
-        cv2.resizeWindow(self._local_win, 960, 560)
-        cv2.setMouseCallback(self._local_win, self._mouse_cb)
-
-        while self._running and rclpy.ok():
-            if not self.cap.isOpened():
-                time.sleep(0.1)
-                continue
-            ret, frame = self.cap.read()
-            if not ret:
-                continue
-
-            disp, _ = self._process_frame(frame)
-
-            if self._drawing:
-                for pt in self._draw_points:
-                    cv2.circle(disp, pt, 5, (255,255,0), -1)
-                if len(self._draw_points) > 1:
-                    cv2.polylines(disp,
-                                  [np.array(self._draw_points, dtype=np.int32)],
-                                  False, (255,255,0), 1)
-                cv2.putText(disp, "DRAWING: click points → Enter to confirm",
-                            (8,58), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255,255,0), 1)
-
-            cv2.imshow(self._local_win, disp)
-            key = cv2.waitKey(1) & 0xFF
-
-            if key in (ord('d'), ord('D')):
-                self._drawing     = True
-                self._draw_points = []
-            elif key == 13 and self._drawing:
-                if len(self._draw_points) >= 3:
-                    self.zone_polygon = np.array(self._draw_points, dtype=np.int32)
-                    self._save_zone()
-                self._drawing     = False
-                self._draw_points = []
-            elif key in (ord('c'), ord('C')):
-                self.zone_polygon = None
-                self._draw_points = []
-                self._drawing     = False
-            elif key in (ord('q'), ord('Q'), 27):
-                break
-
-        cv2.destroyAllWindows()
-
-    def _mouse_cb(self, event, x, y, flags, param):
-        if self._drawing and event == cv2.EVENT_LBUTTONDOWN:
-            self._draw_points.append((x, y))
+            # rclpy 로거는 같은 호출 위치에서 severity를 바꿀 수 없으므로
+            # if/elif/else로 호출 줄을 분리해야 함.
+            log_msg = (f"[SafetyMonitor] {prev} → {self.current_state} "
+                       f"(dist={int(self._last_distance)}px mode={self._last_mode})")
+            if self.current_state == "CLEAR":
+                self.get_logger().info(log_msg)
+            elif self.current_state == "WARN":
+                self.get_logger().warn(log_msg)
+            else:
+                self.get_logger().error(log_msg)
 
     def destroy_node(self):
         self._running = False
@@ -443,16 +396,10 @@ class SafetyMonitor(Node):
 def main(args=None):
     rclpy.init(args=args)
     node = SafetyMonitor()
-
-    spin_thread = threading.Thread(
-        target=lambda: rclpy.spin(node), daemon=True)
-    spin_thread.start()
-
     try:
-        node.show_local_window()
-    except Exception as e:
-        node.get_logger().warn(f"[SafetyMonitor] 로컬 창 실패: {e}")
-        spin_thread.join()
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
     finally:
         node.destroy_node()
         rclpy.shutdown()
