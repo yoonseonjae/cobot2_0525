@@ -200,6 +200,27 @@ cobot2_0525/
 
 ---
 
+## Git 제외 파일 목록 (.gitignore)
+
+깃허브(GitHub) 원격 저장소에 올라가지 않고 로컬 머신에서만 유지되거나 런타임에 자동으로 생성되는 파일/폴더 경로입니다.
+
+### 1. Kiosk (`kiosk/`)
+- `kiosk/images/`: 런타임에 촬영된 캡처 원본 및 네컷 사진 결과물 보관
+- `kiosk/video/`: 3배속 타임랩스 인코딩 영상(WebM, MP4) 보관
+- `kiosk/firefox_profile/`: 미디어 자동 재생 권한 부여를 위해 런타임에 생성되는 Firefox 브라우저 임시 프로필
+- `kiosk/static/images/`: 런타임에 생성/캐시되는 정적 이미지
+- `kiosk/.vscode/`, `kiosk/__pycache__/`: IDE 환경 설정 및 파이썬 컴파일 캐시
+
+### 2. Developer Dashboard (`developer_dashboard/`)
+- `developer_dashboard/__pycache__/`: 파이썬 컴파일 캐시
+
+### 3. Robot (`robot/`) 및 공통 시스템
+- **`robot/voice_processing/resource/.env`**: OpenAI API Key 등 민감한 보안 인증 정보가 포함된 환경변수 파일 (보안상 제외)
+- `robot/build/`, `robot/install/`, `robot/log/` (및 최상단 `build/`, `install/`, `log/`): ROS 2 `colcon build` 과정에서 생성되는 빌드 결과물 및 런타임 시스템 로그
+- `robot/**/__pycache__/`: ROS 2 파이썬 패키지들(`doosan-robot2`, `object_detection`, `pick_and_place_voice`, `safety_monitor`, `take_picture`, `voice_processing` 등)의 컴파일 캐시
+
+---
+
 ## 알려진 이슈
 
 ### 키오스크 영상이 검은화면으로 나오는 경우
