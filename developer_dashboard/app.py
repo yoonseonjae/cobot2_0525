@@ -1,0 +1,257 @@
+import os
+import time
+import threading
+import numpy as np
+import cv2
+from flask import Flask, render_template, Response, jsonify
+
+import rclpy
+from rclpy.node import Node
+from std_msgs.msg import String
+from sensor_msgs.msg import CompressedImage, Image
+from rcl_interfaces.msg import Log
+from cv_bridge import CvBridge
+
+import requests
+
+app = Flask(__name__)
+app.config['TEMPLATES_AUTO_RELOAD'] = True
+
+ROBOT_ID = "dsr01"
+FIREBASE_BASE = "https://rokey-coop2-default-rtdb.asia-southeast1.firebasedatabase.app"
+
+# /safety_image 토픽 최신 프레임 (JPEG bytes)
+_safety_lock = threading.Lock()
+_latest_safety_jpeg: bytes | None = None
+
+# Global state for dashboard
+system_state = {
+    "robot_status": "ONLINE",
+    "db_status": "CONNECTING",
+    "current_state": "IDLE",
+    "health": 100,
+    "joints": {"j1": 0.0, "j2": 0.0, "j3": 0.0, "j4": 0.0, "j5": 0.0, "j6": 0.0},
+    "logs": [],
+    "rtdb": {}
+}
+
+def fb_get(url):
+    try:
+        r = requests.get(url, timeout=2)
+        return r.json()
+    except Exception:
+        return None
+
+def add_log(category, message, confidence=""):
+    timestamp = time.strftime("[%H:%M:%S]")
+    log_entry = {"time": timestamp, "category": category, "message": message, "confidence": confidence}
+    system_state["logs"].insert(0, log_entry)
+    # Keep only last 20 logs
+    if len(system_state["logs"]) > 20:
+        system_state["logs"].pop()
+
+class DashboardNode(Node):
+    def __init__(self):
+        super().__init__('developer_dashboard_node')
+        self.bridge = CvBridge()
+
+        # safety_monitor가 발행하는 어노테이션 이미지(/safety_image) 구독
+        # → /video_feed 엔드포인트에서 그대로 MJPEG으로 송출
+        self.sub_safety_image = self.create_subscription(
+            Image,
+            '/safety_image',
+            self.safety_image_callback,
+            10,
+        )
+
+        # Subscriptions
+        self.sub_gesture = self.create_subscription(
+            CompressedImage,
+            f'/{ROBOT_ID}/gesture_view/compressed',
+            self.gesture_callback,
+            10
+        )
+        self.sub_robot_state = self.create_subscription(
+            String,
+            f'/{ROBOT_ID}/current_stage',
+            self.robot_state_callback,
+            10
+        )
+        self.sub_gesture_cmd = self.create_subscription(
+            String,
+            f'/{ROBOT_ID}/gesture_cmd',
+            self.gesture_cmd_callback,
+            10
+        )
+        self.sub_rosout = self.create_subscription(
+            Log,
+            '/rosout',
+            self.rosout_callback,
+            100
+        )
+        
+        # Publisher for Safety Control
+        self.pub_estop = self.create_publisher(String, f'/{ROBOT_ID}/emergency_stop', 10)
+        
+        self.latest_frame = None
+
+    def safety_image_callback(self, msg: Image):
+        global _latest_safety_jpeg
+        try:
+            frame = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+            ok, buf = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+            if ok:
+                with _safety_lock:
+                    _latest_safety_jpeg = buf.tobytes()
+        except Exception as e:
+            self.get_logger().warn(f'/safety_image 변환 실패: {e}')
+
+    def gesture_callback(self, msg):
+        pass
+        # We can extract logs from here if needed
+        # add_log("GESTURE", "V-SIGN DETECTED", "94%")
+        pass
+
+    def robot_state_callback(self, msg):
+        if system_state["current_state"] != msg.data:
+            add_log("SYSTEM", f"Stage changed to {msg.data}")
+            system_state["current_state"] = msg.data
+
+    def gesture_cmd_callback(self, msg):
+        add_log("GESTURE", f"CMD: {msg.data}", "99%")
+        
+    def rosout_callback(self, msg):
+        # Filter noisy nodes if necessary, or just accept all INFO and above
+        if msg.level >= 20: # INFO, WARN, ERROR, FATAL
+            # msg.name is node name, msg.msg is the log string
+            level_str = "INFO"
+            if msg.level == 30: level_str = "WARN"
+            elif msg.level >= 40: level_str = "ERROR"
+            
+            # Map node names to UI categories for styling
+            cat = "SYSTEM"
+            name_lower = msg.name.lower()
+            if "object_detection" in name_lower or "yolo" in name_lower: cat = "OBJECT"
+            elif "gesture" in name_lower: cat = "GESTURE"
+            elif "voice" in name_lower: cat = "VOICE"
+            elif "kiosk" in name_lower: cat = "FIREBASE"
+            
+            # Skip some very noisy system logs if desired, but for now we show all
+            add_log(cat, msg.msg, level_str)
+
+    def trigger_estop(self):
+        msg = String()
+        msg.data = "STOP"
+        self.pub_estop.publish(msg)
+        add_log("SAFETY", "EMERGENCY STOP TRIGGERED", "")
+
+ros_node = None
+
+def ros_spin_thread():
+    global ros_node
+    rclpy.init(args=None)
+    ros_node = DashboardNode()
+    rclpy.spin(ros_node)
+    ros_node.destroy_node()
+    rclpy.shutdown()
+
+def fb_poll_thread():
+    """Poll Firebase for events to show in AI Logs"""
+    last_state = {
+        "start": False, "end": False, "concept": "", "capture": False,
+        "task": "", "r_state": "", "tools": {}
+    }
+    while True:
+        try:
+            db_full = fb_get(f"{FIREBASE_BASE}/.json")
+            if db_full is not None:
+                system_state["db_status"] = "ONLINE"
+                system_state["rtdb"] = db_full
+                
+                start_val = db_full.get("start", False)
+                if start_val and not last_state["start"]:
+                    add_log("FIREBASE", "User Triggered: START", "100%")
+                last_state["start"] = start_val
+                
+                end_val = db_full.get("end", False)
+                if end_val and not last_state["end"]:
+                    add_log("FIREBASE", "User Triggered: END", "100%")
+                last_state["end"] = end_val
+                
+                concept_val = db_full.get("concept", "")
+                if concept_val and concept_val != last_state["concept"]:
+                    add_log("FIREBASE", f"Concept Selected: {concept_val}", "100%")
+                last_state["concept"] = concept_val
+                
+                capture_val = db_full.get("capture", False)
+                if capture_val and not last_state["capture"]:
+                    add_log("FIREBASE", "Capture Triggered", "100%")
+                last_state["capture"] = capture_val
+                
+                # Check for Robot Status changes
+                r_status = db_full.get("robot_status", {})
+                current_task = r_status.get("current_task", "")
+                if current_task and current_task != last_state["task"]:
+                    add_log("SYSTEM", f"Task Changed: {current_task}", "INFO")
+                last_state["task"] = current_task
+                
+                current_r_state = r_status.get("state", "")
+                if current_r_state and current_r_state != last_state["r_state"]:
+                    add_log("SYSTEM", f"Robot State: {current_r_state}", "INFO")
+                last_state["r_state"] = current_r_state
+                
+                # Check for Prop/Tool changes
+                tools = db_full.get("tool", {})
+                for tool_name, is_picked in tools.items():
+                    if is_picked and not last_state["tools"].get(tool_name, False):
+                        add_log("OBJECT", f"Prop Delivered: {tool_name.upper()}", "100%")
+                last_state["tools"] = tools
+            
+        except Exception as e:
+            system_state["db_status"] = "OFFLINE"
+        time.sleep(1.0)
+
+def generate_video_stream():
+    """safety_monitor가 발행하는 /safety_image(YOLO bbox + 안전구역 오버레이)를 MJPEG으로 송출."""
+    no_signal = np.zeros((480, 640, 3), dtype=np.uint8)
+    cv2.putText(no_signal, "WAITING FOR /safety_image ...", (50, 240),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.9, (100, 100, 100), 2)
+    _, ns_buf = cv2.imencode('.jpg', no_signal)
+    ns_bytes = ns_buf.tobytes()
+
+    while True:
+        with _safety_lock:
+            frame_bytes = _latest_safety_jpeg if _latest_safety_jpeg else ns_bytes
+        yield (b'--frame\r\n'
+               b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+        time.sleep(0.033)  # ~30 fps
+
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+@app.route('/video_feed')
+def video_feed():
+    # cam 쿼리 파라미터는 하위 호환 위해 받지만 무시 (ROS /safety_image 토픽 단일 소스)
+    return Response(generate_video_stream(), mimetype='multipart/x-mixed-replace; boundary=frame')
+
+@app.route('/api/telemetry')
+def get_telemetry():
+    return jsonify(system_state)
+
+@app.route('/api/estop', methods=['POST'])
+def estop():
+    if ros_node:
+        ros_node.trigger_estop()
+        return jsonify({"status": "E-STOP ACTIVATED"})
+    return jsonify({"status": "ERROR", "message": "ROS Node not running"})
+
+if __name__ == '__main__':
+    # Start ROS2 thread
+    threading.Thread(target=ros_spin_thread, daemon=True).start()
+    
+    # Start Firebase Polling thread
+    threading.Thread(target=fb_poll_thread, daemon=True).start()
+    
+    # Start Flask
+    app.run(host='0.0.0.0', port=5001, debug=False, threaded=True)

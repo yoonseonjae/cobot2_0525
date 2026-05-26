@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ROBO-BOOTH DASHBOARD v3.1</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🤖</text></svg>">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="dashboard-container">
+        <!-- Header -->
+        <header class="dashboard-header">
+            <div class="logo">
+                <span class="icon">🤖</span>
+                <div>
+                    <h1>ROBO-BOOTH DASHBOARD <span class="version">v3.1</span></h1>
+                </div>
+            </div>
+            <div class="header-actions">
+                <button class="icon-btn">⚙️</button>
+                <button class="icon-btn">🔔</button>
+                <button class="icon-btn profile">👤</button>
+            </div>
+        </header>
+
+        <div class="main-content">
+            <!-- Left Panel: Telemetry -->
+            <aside class="panel telemetry-panel">
+                <div class="panel-header">
+                    <h2>TELEMETRY</h2>
+                    <span class="subtitle">Glassmorphic Cards</span>
+                </div>
+                
+                <div class="card status-card">
+                    <h3>SYSTEM STATUS</h3>
+                    <div class="status-indicator" style="margin-bottom: 0.5rem;">
+                        <span class="dot online" id="robot-dot"></span>
+                        <span class="status-text" id="robot-status-text">ONLINE</span>
+                        <span style="color: var(--text-secondary); margin-left: auto; font-size: 0.8rem;">ROBOT</span>
+                    </div>
+                    <div class="status-indicator">
+                        <span class="dot online" id="db-dot"></span>
+                        <span class="status-text" id="db-status-text">CONNECTING</span>
+                        <span style="color: var(--text-secondary); margin-left: auto; font-size: 0.8rem;">DATABASE</span>
+                    </div>
+                </div>
+
+                <div class="card state-card">
+                    <h3>CURRENT STATE</h3>
+                    <div class="state-value" id="current-state-text">ACTIVE / CAPTURING</div>
+                </div>
+
+                <div class="card joints-card">
+                    <h3>JOINT ANGLES</h3>
+                    <div class="joints-grid" id="joints-grid">
+                        <div class="joint">J1 <span id="j1-val">0.0°</span></div>
+                        <div class="joint">J2 <span id="j2-val">0.0°</span></div>
+                        <div class="joint">J3 <span id="j3-val">0.0°</span></div>
+                        <div class="joint">J4 <span id="j4-val">0.0°</span></div>
+                        <div class="joint">J5 <span id="j5-val">0.0°</span></div>
+                        <div class="joint">J6 <span id="j6-val">0.0°</span></div>
+                    </div>
+                    <div class="chart-placeholder">
+                        <div class="wave"></div>
+                    </div>
+                </div>
+
+                <div class="card mission-card">
+                    <h3>RTDB: MISSION STATUS</h3>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; font-size: 0.85rem; margin-top: 0.5rem;">
+                        <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 0.2rem;">
+                            <span style="color: var(--text-secondary);">SCENE</span> 
+                            <span id="rtdb-scene" style="color: var(--neon-purple); font-weight: bold; text-align: right;">-</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 0.2rem;">
+                            <span style="color: var(--text-secondary);">TASK</span> 
+                            <span id="rtdb-task" style="color: var(--neon-blue); font-weight: bold; text-align: right;">-</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 0.2rem;">
+                            <span style="color: var(--text-secondary);">STATE</span> 
+                            <span id="rtdb-state" style="color: var(--neon-green); font-weight: bold; text-align: right;">-</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 0.2rem;">
+                            <span style="color: var(--text-secondary);">PICKED</span> 
+                            <span id="rtdb-picked" style="font-weight: bold; text-align: right;">0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card tools-card">
+                    <h3>RTDB: PROPS & TOOLS</h3>
+                    <div class="tools-grid" id="tools-grid" style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.5rem;">
+                        <!-- JS will populate tool badges -->
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Center Panel: Video Feed -->
+            <main class="panel video-panel">
+                <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <h2>LIVE CAMERA FEED - SAFETY ZONE</h2>
+                        <span class="subtitle">Live High-Quality USB Camera Video</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                        <span style="font-size: 0.8rem; color: var(--text-secondary);">CAM ID:</span>
+                        <select id="cam-select" style="background: var(--card-bg); color: var(--neon-blue); border: 1px solid var(--neon-blue); border-radius: 4px; padding: 0.3rem; outline: none; cursor: pointer;">
+                            <option value="0">/dev/video0</option>
+                            <option value="1">/dev/video1</option>
+                            <option value="2">/dev/video2</option>
+                            <option value="4">/dev/video4</option>
+                            <option value="6">/dev/video6</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="video-container">
+                    <img src="{{ url_for('video_feed') }}?cam=0" alt="Live Feed" class="video-stream" id="main-video-stream">
+                    <div class="video-overlay">
+                        <span class="overlay-text left">ACTIVE ZONE: CLEAR</span>
+                        <span class="overlay-text right" id="clock">2024-05-20 14:15:22</span>
+                    </div>
+                </div>
+            </main>
+
+            <!-- Right Panel: AI Logs -->
+            <aside class="panel logs-panel">
+                <div class="panel-header">
+                    <h2>AI LOGS</h2>
+                    <span class="subtitle">Real-Time Feed</span>
+                </div>
+                
+                <div class="logs-container" id="logs-container">
+                    <!-- Logs will be injected here via JS -->
+                </div>
+            </aside>
+        </div>
+
+        <!-- Bottom Panel: Safety Controls -->
+        <footer class="safety-bar">
+            <div class="safety-title">SAFETY CONTROL BAR</div>
+            <div class="control-buttons">
+                <button class="btn btn-secondary">SYSTEM RESET</button>
+                <button class="btn btn-danger" id="estop-btn">EMERGENCY STOP</button>
+                <button class="btn btn-warning">PAUSE OPERATION</button>
+            </div>
+        </footer>
+    </div>
+    
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html>

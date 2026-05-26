@@ -50,8 +50,6 @@ def clean_feed():
 from sensor_msgs.msg import CompressedImage, Image
 from std_msgs.msg import String, Bool
 from cv_bridge import CvBridge
-import message_filters
-from rclpy.qos import qos_profile_sensor_data
 
 ROBOT_ID = "dsr01"
 SAVE_DIR = "/home/jeyu/사진"
@@ -127,12 +125,23 @@ class GestureCameraNode(Node):
         self.bridge = CvBridge()
         
         # 💡 [핵심 1] Realsense ROS 노드의 토픽 구독 (압축 컬러 + 원본 깊이)
-        self.color_sub = message_filters.Subscriber(self, CompressedImage, '/camera/camera/color/image_raw/compressed', qos_profile=qos_profile_sensor_data)
-        self.depth_sub = message_filters.Subscriber(self, Image, '/camera/camera/aligned_depth_to_color/image_raw', qos_profile=qos_profile_sensor_data)
-        
-        # 💡 [핵심 2] 컬러와 깊이 화면을 동기화하여 동시에 콜백으로 전달
-        self.ts = message_filters.ApproximateTimeSynchronizer([self.color_sub, self.depth_sub], queue_size=10, slop=0.1)
-        self.ts.registerCallback(self.camera_callback)
+        # QoS: 정수 depth=10 → RELIABLE. sensor_data(BEST_EFFORT)는 매칭은 되지만
+        # 실제 수신이 안 되는 케이스가 humble에서 자주 발생해 RELIABLE로 고정.
+        # message_filters 동기화는 RealSense color/depth timestamp 불일치로 매칭 실패가 잦아
+        # 제거하고, depth는 latest 캐시 + color 콜백 단일 트리거로 변경.
+        self.latest_depth_msg = None
+        self.create_subscription(
+            Image,
+            '/camera/camera/aligned_depth_to_color/image_raw',
+            self._depth_cb,
+            10,
+        )
+        self.create_subscription(
+            CompressedImage,
+            '/camera/camera/color/image_raw/compressed',
+            self._color_cb,
+            10,
+        )
         
         # 작업 완료 신호 구독
         self.task_completed = False
@@ -164,6 +173,14 @@ class GestureCameraNode(Node):
         if msg.data and not self.task_completed:
             self.task_completed = True
             self.get_logger().info("🚀 작업 완료 신호 수신! 제스처 카메라 분석을 시작합니다.")
+
+    def _depth_cb(self, msg: Image):
+        self.latest_depth_msg = msg
+
+    def _color_cb(self, color_msg: CompressedImage):
+        if self.latest_depth_msg is None:
+            return
+        self.camera_callback(color_msg, self.latest_depth_msg)
 
     def camera_callback(self, color_msg, depth_msg):
         # 로봇 작업이 안 끝났으면 카메라는 켜져 있어도 분석하지 않음

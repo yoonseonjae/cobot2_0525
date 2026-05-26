@@ -42,7 +42,14 @@ Doosan M0609 협동로봇과 음성/제스처 인식을 활용한 인터랙티�
 - ROS2 Humble
 - Doosan robot ROS2 패키지 의존성
 - Intel RealSense SDK 2 + ROS2 wrapper (`realsense2_camera`)
-- Python 패키지:
+- ROS2 시스템 패키지:
+  ```bash
+  sudo apt install ros-humble-cv-bridge \
+                   ros-humble-realsense2-camera \
+                   ros-humble-image-transport-plugins \
+                   ros-humble-compressed-image-transport
+  ```
+- Python 패키지 (`developer_dashboard`도 동일 환경에서 동작):
   ```bash
   pip install ultralytics mediapipe scipy openai openai-whisper \
               pyaudio sounddevice tflite-runtime \
@@ -52,19 +59,18 @@ Doosan M0609 협동로봇과 음성/제스처 인식을 활용한 인터랙티�
 
 ---
 
-## 필수 파일 (git에 포함되지 않음)
+## 필수 파일
 
-`.gitignore` 처리되어 있어 클론 후 직접 준비해야 합니다.
+| 파일 | 위치 | 상태 | 설명 |
+|---|---|---|---|
+| `.env` | `robot/voice_processing/resource/.env` | git 제외 | `OPENAI_API_KEY` 입력 필요 |
+| `260519_best.pt` | `robot/object_detection/resource/260519_best.pt` | git 포함 | object_detection YOLO 모델 |
+| `safety_best.pt` | `robot/safety_monitor/resource/safety_best.pt` | git 포함 | 안전감지 YOLO 모델 |
 
-| 파일 | 위치 | 설명 |
-|---|---|---|
-| `.env` | `robot/voice_processing/resource/.env` | `OPENAI_API_KEY` 키 입력 |
-| `safety_best.pt` | `robot/safety_monitor/resource/safety_best.pt` | 안전감지용 YOLO 모델 (별도 학습/제공 필요) |
-
-`.env` 준비:
+`.env` 준비 (클론 후 1회):
 ```bash
 cp robot/voice_processing/resource/.env.example robot/voice_processing/resource/.env
-# 그다음 OPENAI_API_KEY 값 입력
+# OPENAI_API_KEY 값 입력
 ```
 
 ---
@@ -101,31 +107,36 @@ python3 app.py
 
 ---
 
-### 메인 제어 PC (터미널 7개)
+### 메인 제어 PC (필수 터미널 7개 + 선택 2개)
 
 > **순서 중요**: ① → ② → ③ 까지 띄운 뒤 나머지 실행
 
-먼저 모든 터미널에서:
+각 ROS 터미널 공통 사전 작업:
 ```bash
 cd cobot2_0525/robot
 source install/setup.bash
 ```
 
+#### 필수 (터미널 1~7)
 | # | 명령 | 역할 |
 |---|------|------|
-| ① | `ros2 launch dsr_bringup2 dsr_bringup2_rviz.launch.py mode:=real host:=<로봇IP>` | Doosan 로봇 bringup (사용자 alias: `robodon`) |
-| ② | `ros2 launch realsense2_camera rs_launch.py align_depth.enable:=true` | RealSense 카메라 (사용자 alias: `realsense`) |
+| ① | `ros2 launch dsr_bringup2 dsr_bringup2_rviz.launch.py mode:=real host:=<로봇IP>` | Doosan 로봇 bringup (alias: `roboton`) |
+| ② | `ros2 launch realsense2_camera rs_launch.py align_depth.enable:=true` | RealSense 카메라 (alias: `realsense`) |
 | ③ | `ros2 run pick_and_place_voice robot_control_07` | 메인 픽앤플레이스 컨트롤러 |
 | ④ | `ros2 run voice_processing get_keyword` | 음성→GPT-4o 키워드 추출 |
 | ⑤ | `ros2 run object_detection object_detection` | YOLO + 깊이 → 3D 좌표 |
 | ⑥ | `ros2 run take_picture robot_control_node_05` | 제스처 → 로봇 이동 |
-| ⑦ | `ros2 run take_picture gesture_camera_node_08` | 제스처 인식 + 영상 스트리밍 (Flask :5000) |
+| ⑦ | `ros2 run take_picture gesture_camera_node_08` | 제스처 인식 + 영상 스트리밍 (Flask `:5000`) |
 
-### 안전감지 (선택, 별도 터미널 2개)
-| 터미널 | 명령 | 역할 |
-|---|---|---|
-| 8 | `ros2 run safety_monitor safety_monitor` | 상단뷰 USB 웹캠 안전구역 감시 |
-| 9 | `ros2 run safety_monitor safety_stream_server` | 대시보드용 MJPEG 스트림 (`:5001/safety_feed`) |
+#### 선택 (터미널 8~9, 안전감지 + 개발자 대시보드)
+| # | 명령 | 역할 |
+|---|------|------|
+| ⑧ | `ros2 run safety_monitor safety_monitor` | 상단뷰 USB 웹캠 + YOLO → `/safety_image` 토픽 발행 |
+| ⑨ | `cd cobot2_0525/developer_dashboard && python3 app.py` | ROS 로그 / 상태 / `/safety_image` 영상 통합 대시보드 (`:5001`) |
+
+> ※ `safety_stream_server`는 `developer_dashboard`로 통합되어 더 이상 실행하지 않습니다. 옛 명령(`ros2 run safety_monitor safety_stream_server`)을 같이 띄우면 포트 5001 충돌이 납니다.
+>
+> ※ ⑨ developer_dashboard는 ROS 환경이 source 되어 있어야 함 (`source /opt/ros/humble/setup.bash` + `source ~/cobot2_0525/robot/install/setup.bash`). ROS 빌드 환경과 같은 터미널에서 실행하는 게 가장 편합니다.
 
 ---
 
@@ -171,6 +182,11 @@ cobot2_0525/
 │   ├── images/                 # 런타임 촬영 사진 저장
 │   └── video/                  # 런타임 타임랩스 영상 저장
 │
+├── developer_dashboard/        # 개발자 대시보드 (Flask :5001, /safety_image 시각화 + ROS 로그)
+│   ├── app.py
+│   ├── templates/
+│   └── static/
+│
 └── robot/                      # 메인 제어 PC (ROS2 워크스페이스)
     ├── firebase_client.py      # Firebase REST 공통 모듈
     ├── od_msg/                 # 커스텀 ROS2 서비스 정의
@@ -178,7 +194,7 @@ cobot2_0525/
     ├── pick_and_place_voice/   # 픽앤플레이스 + Firebase 연동
     ├── voice_processing/       # STT + GPT-4o
     ├── take_picture/           # 제스처 카메라 + 로봇 이동
-    ├── safety_monitor/         # 안전구역 감시
+    ├── safety_monitor/         # 안전구역 감시 (YOLO → /safety_image 발행)
     └── doosan-robot2/          # Doosan 로봇 ROS2 패키지
 ```
 
