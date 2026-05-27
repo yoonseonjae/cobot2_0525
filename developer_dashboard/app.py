@@ -1,4 +1,5 @@
 import os
+import atexit
 import json
 import time
 import threading
@@ -102,15 +103,19 @@ safety_mode_state = {
 _safety_lock_mode = threading.Lock()
 _safety_frame_log: deque = deque()
 
-def _fb_sync_safety_mode(mode: str, message: str):
-    """Firebase /safety_mode.json에 모드 동기화 (키오스크 UI에 통보)."""
+def _fb_sync_safety_mode(mode: str, message: str, sync: bool = False):
+    """Firebase /safety_mode.json에 모드 동기화 (키오스크 UI에 통보).
+    sync=True면 현재 스레드에서 바로 PUT (시작/종료 hook용)."""
     def _do():
         try:
             requests.put(f"{FIREBASE_BASE}/safety_mode.json",
                          json={"mode": mode, "message": message}, timeout=2)
         except Exception:
             pass
-    threading.Thread(target=_do, daemon=True).start()
+    if sync:
+        _do()
+    else:
+        threading.Thread(target=_do, daemon=True).start()
 
 def _set_safety_mode(mode: str, source, message: str = ""):
     """안전모드 전환 + 로봇/키오스크 통보. _safety_lock_mode를 잡은 상태에서 호출."""
@@ -753,7 +758,24 @@ def safety_zone():
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
+def _cleanup_safety_mode_on_exit():
+    """대시보드 종료 시 Firebase의 safety_mode를 NORMAL로 정리.
+    이게 없으면 다음에 키오스크가 시작될 때 stale 값(SAFETY_PAUSE/EMERGENCY)을 그대로 읽음."""
+    try:
+        _fb_sync_safety_mode("NORMAL", "", sync=True)
+        print("🛑 [Dashboard] /safety_mode.json → NORMAL 로 정리 완료")
+    except Exception as e:
+        print(f"⚠️ [Dashboard] safety_mode 정리 실패: {e}")
+
 if __name__ == '__main__':
+    # ① 시작 직후 Firebase /safety_mode.json을 NORMAL 로 강제 초기화
+    #    (이전 세션이 SAFETY_PAUSE/EMERGENCY 상태에서 죽었어도 키오스크가 깨끗하게 켜지도록)
+    _fb_sync_safety_mode("NORMAL", "", sync=True)
+    print("🟢 [Dashboard] /safety_mode.json → NORMAL 로 초기화")
+
+    # ② 정상/비정상 종료 시 정리
+    atexit.register(_cleanup_safety_mode_on_exit)
+
     # Start ROS2 thread
     threading.Thread(target=ros_spin_thread, daemon=True).start()
 
