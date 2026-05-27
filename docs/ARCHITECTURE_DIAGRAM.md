@@ -9,36 +9,36 @@ flowchart LR
     classDef default fill:#f9f9f9,stroke:#333,stroke-width:1px;
     classDef coord fill:#e1f5fe,stroke:#0277bd,stroke-width:2px;
 
-    subgraph VOICE["VOICE USER INTERFACE"]
+    subgraph VOICE["음성 사용자 인터페이스 (VOICE)"]
         direction LR
-        STT["STT\n(Mic Input)"] --> GPT["GPT-4o\n(LLM Logic)"]
+        STT["STT\n(마이크 입력)"] --> GPT["GPT-4o\n(자연어 처리)"]
     end
 
-    subgraph VISION["VISION (REALSENSE & WEBCAM)"]
+    subgraph VISION["비전 센서 (REALSENSE & WEBCAM)"]
         direction TB
-        RS_C["Color Stream"]
-        RS_D["Depth Stream"]
-        WEB_C["Top-view Stream"]
+        RS_C["컬러 영상 스트림"]
+        RS_D["깊이 영상 스트림"]
+        WEB_C["상단뷰 영상 스트림"]
     end
 
-    subgraph IMG_PROC["IMAGE PROCESSOR (AI)"]
+    subgraph IMG_PROC["이미지 프로세서 (AI)"]
         direction TB
-        YOLO["YOLOv8 + Transform\n(Object 3D Coord)"]
-        GES["Gesture Classifier\n(Direction/Capture)"]
-        SAFE["Safety Monitor\n(Zone Detection)"]
+        YOLO["YOLOv8 + 좌표 변환\n(소품 3D 좌표 추출)"]
+        GES["제스처 분류기\n(방향 및 촬영 제어)"]
+        SAFE["안전 감시 모니터\n(안전구역 침범 감지)"]
     end
 
-    subgraph CLOUD["CLOUD / DB"]
+    subgraph CLOUD["클라우드 / DB"]
         direction TB
-        FB["Firebase RTDB\n(State Sync)"]
+        FB["Firebase RTDB\n(상태 동기화)"]
     end
 
-    subgraph CTRL["ROS2 CONTROLLER (MAIN)"]
+    subgraph CTRL["ROS2 메인 컨트롤러"]
         direction TB
-        TC1["Task Coordinator 1\n[Pick & Place]\n(robot_control_07)"]:::coord
-        TC2["Task Coordinator 2\n[Gesture Control]\n(robot_control_05)"]:::coord
-        MVR["Mover Engine & Gripper Logic\n(DSR API Wrapper)"]
-        STAT["System Status & Safety\n(State Machine)"]
+        TC1["작업 코디네이터 1\n[픽앤플레이스]\n(robot_control_07)"]:::coord
+        TC2["작업 코디네이터 2\n[제스처 제어]\n(robot_control_05)"]:::coord
+        MVR["모션 엔진 & 그리퍼 로직\n(DSR API 래퍼)"]
+        STAT["시스템 상태 및 안전\n(상태 머신)"]
         
         TC1 --> MVR
         TC2 --> MVR
@@ -46,10 +46,10 @@ flowchart LR
         STAT --> TC2
     end
 
-    subgraph HW["HARDWARE (ROBOT/GRIPPER)"]
+    subgraph HW["하드웨어 (로봇/그리퍼)"]
         direction TB
-        ARM["M0609 Robot Arm"]
-        GRP["RG2 Gripper"]
+        ARM["M0609 로봇 팔"]
+        GRP["RG2 그리퍼"]
     end
 
     %% 내부 연결 (비전 -> AI)
@@ -59,19 +59,19 @@ flowchart LR
     WEB_C --> SAFE
 
     %% 컴포넌트 간 외부 통신 (라벨에 통신 타입 명시)
-    GPT -- "User Command [REST API]" --> FB
-    FB -- "State Trigger [REST API]" --> TC1
+    GPT -- "사용자 명령 [REST API]" --> FB
+    FB -- "상태 변경 트리거 [REST API]" --> TC1
     
-    YOLO -- "Target Coord [Service]" --> TC1
-    GES -- "Direction Cmd [Topic]" --> TC2
-    SAFE -- "Safety Alert [Topic]" --> STAT
+    YOLO -- "목표 3D 좌표 [Service]" --> TC1
+    GES -- "이동/방향 명령 [Topic]" --> TC2
+    SAFE -- "안전 경고 [Topic]" --> STAT
     
-    TC1 -- "Task Complete [Topic]" --> TC2
+    TC1 -- "작업 완료 알림 [Topic]" --> TC2
     
-    MVR -- "Motion Plan [Action/Service]" --> ARM
-    MVR -- "Gripper Cmd [Service]" --> GRP
+    MVR -- "모션 실행 [Action/Service]" --> ARM
+    MVR -- "그리퍼 제어 [Service]" --> GRP
     
-    ARM -- "Robot Status [Topic]" --> STAT
+    ARM -- "로봇 현재 상태 [Topic]" --> STAT
 
     %% 스타일 적용 팁:
     %% - Topic: 주로 스트림성 데이터 (영상, 제스처, 상태)
