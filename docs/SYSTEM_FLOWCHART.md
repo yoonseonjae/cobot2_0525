@@ -3,57 +3,57 @@
 ```mermaid
 flowchart TD
     subgraph KIOSK["🖥️ 키오스크 PC (kiosk/)"]
-        K1[Flask 웹 서버\n포트 5000]
-        K2[UI / UX 표시\n인생두컷 모드]
-        K3[사진 캡처 및\n타임랩스(FFmpeg) 인코딩]
+        K1["Flask 웹 서버\n포트 5000"]
+        K2["UI / UX 표시\n인생두컷 모드"]
+        K3["사진 캡처 및\n타임랩스(FFmpeg) 인코딩"]
         K1 --> K2 --> K3
     end
 
     subgraph DASHBOARD["🖥️ 개발자 대시보드 (developer_dashboard/)"]
-        D1[ROS 상태 및 로그 통합 모니터링]
-        D2[Safety 상태머신\n일시정지/비상정지 제어]
-        D3[카메라 영상 /safety_image 스트리밍]
+        D1["ROS 상태 및 로그 통합 모니터링"]
+        D2["Safety 상태머신\n일시정지/비상정지 제어"]
+        D3["카메라 영상 /safety_image 스트리밍"]
     end
 
     subgraph FB["☁️ Firebase Realtime DB"]
-        FB1[(/start, /end\n진행 상태 제어)]
-        FB2[(/concept, /tool\n음성 인식 결과)]
-        FB3[(/capture, /voice_ok\n이벤트 트리거)]
-        FB4[(/safety_mode\n비상 정지/모드 동기화)]
+        FB1[("/start, /end\n진행 상태 제어")]
+        FB2[("/concept, /tool\n음성 인식 결과")]
+        FB3[("/capture, /voice_ok\n이벤트 트리거")]
+        FB4[("/safety_mode\n비상 정지/모드 동기화")]
     end
 
     subgraph ROS["🤖 메인 제어 PC (ROS2 / Ubuntu)"]
         subgraph RC_NODE["pick_and_place_voice"]
-            RC1[robot_control_07\n메인 로봇 모션 제어]
-            RC2[Firebase 리스너\n상태 동기화]
+            RC1["robot_control_07\n메인 로봇 모션 제어"]
+            RC2["Firebase 리스너\n상태 동기화"]
         end
 
         subgraph VP_NODE["voice_processing"]
-            VP1[마이크 입력 및 STT]
-            VP2[GPT-4o 연동\n소품 키워드 추출]
+            VP1["마이크 입력 및 STT"]
+            VP2["GPT-4o 연동\n소품 키워드 추출"]
         end
 
         subgraph OD_NODE["object_detection [Docker 격리 환경]"]
-            OD1[YOLOv8 추론 모델\nbest.pt]
-            OD2[RealSense 깊이 데이터\n3D 좌표 변환]
+            OD1["YOLOv8 추론 모델\nbest.pt"]
+            OD2["RealSense 깊이 데이터\n3D 좌표 변환"]
         end
 
         subgraph GES_NODE["take_picture"]
-            GES1[gesture_camera_node_08\n손 제스처 판별]
-            GES2[robot_control_node_05\n제스처 기반 위치/줌 제어]
+            GES1["gesture_camera_node_08\n손 제스처 판별"]
+            GES2["robot_control_node_05\n제스처 기반 위치/줌 제어"]
         end
 
         subgraph SAFE_NODE["safety_monitor"]
-            S1[YOLO 기반 안전구역(Zone) 감지\nsafety_best.pt]
-            S2[/safety_alert 및\n/safety_image 발행]
+            S1["YOLO 기반 안전구역(Zone) 감지\nsafety_best.pt"]
+            S2["/safety_alert 및\n/safety_image 발행"]
         end
     end
 
     subgraph HARDWARE["🦾 하드웨어 디바이스"]
-        H1[DSR m0609 로봇 팔]
-        H2[RealSense D435 카메라]
-        H3[상단뷰 USB 웹캠]
-        H4[마이크 스피커]
+        H1["DSR m0609 로봇 팔"]
+        H2["RealSense D435 카메라"]
+        H3["상단뷰 USB 웹캠"]
+        H4["마이크 스피커"]
     end
 
     %% 연결 관계
