@@ -29,6 +29,7 @@ flowchart TD
         end
 
         subgraph VP_NODE["voice_processing"]
+            H4["메인 PC 내장 마이크 및 스피커"]
             VP1["마이크 입력 및 STT"]
             VP2["GPT-4o 연동\n소품 키워드 추출"]
         end
@@ -53,7 +54,6 @@ flowchart TD
         H1["DSR m0609 로봇 팔"]
         H2["RealSense D435 카메라"]
         H3["상단뷰 USB 웹캠"]
-        H4["마이크 스피커"]
     end
 
     %% 연결 관계
