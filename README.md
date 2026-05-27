@@ -39,23 +39,26 @@ Doosan M0609 협동로봇과 음성/제스처 인식을 활용한 인터랙티�
   ```
 
 ### 메인 제어 PC
-- ROS2 Humble
+- ROS2 Humble (Host PC)
 - Doosan robot ROS2 패키지 의존성
 - Intel RealSense SDK 2 + ROS2 wrapper (`realsense2_camera`)
-- ROS2 시스템 패키지:
+- **Docker & Docker Compose** (객체 인식 AI 노드 격리용)
+- ROS2 시스템 패키지 (Host PC용):
   ```bash
   sudo apt install ros-humble-cv-bridge \
                    ros-humble-realsense2-camera \
                    ros-humble-image-transport-plugins \
-                   ros-humble-compressed-image-transport
+                   ros-humble-compressed-image-transport \
+                   ros-humble-rmw-cyclonedds-cpp ros-humble-cyclonedds
   ```
-- Python 패키지 (`developer_dashboard`도 동일 환경에서 동작):
+- Python 패키지 (`developer_dashboard` 등 로컬 노드용):
   ```bash
-  pip install ultralytics mediapipe scipy openai openai-whisper \
+  pip install mediapipe scipy openai openai-whisper \
               pyaudio sounddevice tflite-runtime \
               flask flask-cors firebase-admin requests \
               python-dotenv opencv-python numpy
   ```
+*(주의: `ultralytics` 등 무거운 딥러닝 패키지는 의존성 충돌 방지를 위해 Docker 내부에서만 설치/실행합니다.)*
 
 ---
 
@@ -87,10 +90,16 @@ cd cobot2_0525/kiosk
 ### 메인 제어 PC
 ```bash
 git clone https://github.com/yoonseonjae/cobot2_0525.git
+
+# 1. 로컬 환경 빌드
 cd cobot2_0525/robot
 colcon build --symlink-install
 source install/setup.bash
-# 매 터미널마다 source 필요
+
+# 2. 도커 환경(object_detection) 워크스페이스 분리 세팅
+mkdir -p ~/ros2_ws/src
+cp -r ~/cobot2_0525/robot/object_detection ~/ros2_ws/src/
+cp -r ~/cobot2_0525/robot/od_msg ~/ros2_ws/src/
 ```
 
 ---
@@ -107,26 +116,60 @@ python3 app.py
 
 ---
 
+### 🐳 도커(Docker) 도입 배경
+YOLOv8 기반의 `object_detection` 노드는 `ultralytics`, `numpy 2.x` 등 최신 딥러닝 라이브러리를 강제합니다. 이 라이브러리들을 로컬(Host PC)에 직접 설치할 경우, ROS2 Humble의 구버전 의존성(`matplotlib`, `cv_bridge`가 `numpy 1.x`를 요구하는 등)과 **심각한 버전 충돌**을 일으켜 카메라 작동 등 시스템 전체를 망가뜨리는 치명적인 버그가 발생합니다.
+이를 해결하기 위해 가장 무거운 딥러닝 모듈인 **`object_detection` 노드만 도커 컨테이너로 완벽히 격리**하고, 나머지 가벼운 하드웨어 제어 노드들은 로컬에서 실행하는 **'하이브리드 구조'**를 채택했습니다.
+
+---
+
 ### 메인 제어 PC (필수 터미널 7개 + 선택 2개)
 
 > **순서 중요**: ① → ② → ③ 까지 띄운 뒤 나머지 실행
 
-각 ROS 터미널 공통 사전 작업:
+로컬 터미널(①~④, ⑥~⑧) 공통 사전 작업:
 ```bash
-cd cobot2_0525/robot
+cd ~/cobot2_0525/robot
 source install/setup.bash
 ```
 
 #### 필수 (터미널 1~7)
-| # | 명령 | 역할 |
-|---|------|------|
-| ① | `ros2 launch dsr_bringup2 dsr_bringup2_rviz.launch.py mode:=real host:=<로봇IP>` | Doosan 로봇 bringup (alias: `roboton`) |
-| ② | `ros2 launch realsense2_camera rs_launch.py align_depth.enable:=true` | RealSense 카메라 (alias: `realsense`) |
-| ③ | `ros2 run pick_and_place_voice robot_control_07` | 메인 픽앤플레이스 컨트롤러 |
-| ④ | `ros2 run voice_processing get_keyword` | 음성→GPT-4o 키워드 추출 |
-| ⑤ | `ros2 run object_detection object_detection` | YOLO + 깊이 → 3D 좌표 |
-| ⑥ | `ros2 run take_picture robot_control_node_05` | 제스처 → 로봇 이동 |
-| ⑦ | `ros2 run take_picture gesture_camera_node_08` | 제스처 인식 + 영상 스트리밍 (Flask `:5000`) |
+| # | 환경 | 명령 | 역할 |
+|---|------|------|------|
+| ① | 로컬 | `ros2 launch dsr_bringup2 dsr_bringup2_rviz.launch.py mode:=real host:=<로봇IP>` | Doosan 로봇 bringup (alias: `roboton`) |
+| ② | 로컬 | `ros2 launch realsense2_camera rs_launch.py align_depth.enable:=true` | RealSense 카메라 (alias: `realsense`) |
+| ③ | 로컬 | `ros2 run pick_and_place_voice robot_control_07` | 메인 픽앤플레이스 컨트롤러 |
+| ④ | 로컬 | `ros2 run voice_processing get_keyword` | 음성→GPT-4o 키워드 추출 |
+| ⑤ | **도커** | *(아래 ⑤번 터미널 도커 전용 실행 가이드 참조)* | YOLO + 깊이 → 3D 좌표 |
+| ⑥ | 로컬 | `ros2 run take_picture robot_control_node_05` | 제스처 → 로봇 이동 |
+| ⑦ | 로컬 | `ros2 run take_picture gesture_camera_node_08` | 제스처 인식 + 영상 스트리밍 (Flask `:5000`) |
+
+#### ⑤번 터미널: AI 컨테이너(도커) 전용 실행 가이드
+도커용 ⑤번 터미널은 아래 명령어를 통해 기동하고 내부에서 셋업합니다.
+
+```bash
+# 1. Host PC에서 도커 기동 (X11 권한 허용 포함)
+xhost +local:root
+docker run -it --name object_detection_container --network host \
+  -e DISPLAY=$DISPLAY \
+  -e QT_X11_NO_MITSHM=1 \
+  -e RMW_IMPLEMENTATION=rmw_cyclonedds_cpp \
+  -e ROS_DOMAIN_ID=60 \
+  -v /tmp/.X11-unix:/tmp/.X11-unix \
+  -v /dev/video0:/dev/video0 \
+  -v ~/ros2_ws:/home/ros2_ws \
+  osrf/ros:humble-desktop bash
+
+# 2. 도커 내부 진입 후 (최초 1회 수동 설치 및 빌드)
+apt update && apt install -y python3-pip ros-humble-rmw-cyclonedds-cpp ros-humble-cyclonedds
+pip3 install ultralytics opencv-python "numpy<2.0.0" "opencv-python==4.9.0.80"
+
+cd /home/ros2_ws
+colcon build
+source install/setup.bash
+
+# 3. 노드 실행
+ros2 run object_detection object_detection
+```
 
 #### 선택 (터미널 8~9, 안전감지 + 개발자 대시보드)
 | # | 명령 | 역할 |
