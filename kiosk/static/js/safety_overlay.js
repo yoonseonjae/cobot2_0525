@@ -18,23 +18,31 @@
         return el;
     }
 
-    function applyMode(mode, message) {
+    function applyMode(payload) {
         const el = ensureOverlay();
         const main = el.querySelector(".safety-badge .main");
         const sub  = el.querySelector(".safety-badge .sub");
+
+        const mode    = (payload && payload.mode)    || "NORMAL";
+        const message = (payload && payload.message) || "";
 
         if (mode === "SAFETY_PAUSE") {
             el.classList.add("show", "pause");
             el.classList.remove("emerg");
             main.textContent = "안 전 정 지 모 드";
-            sub.textContent  = message || "SAFETY PAUSE";
+            sub.textContent  = "잠시 안전을 확인하고 있어요";
         } else if (mode === "EMERGENCY") {
             el.classList.add("show", "emerg");
             el.classList.remove("pause");
             main.textContent = "비 상 정 지 모 드";
-            sub.textContent  = message || "EMERGENCY STOP";
+            // dashboard가 message에 state 6일 때 'EMERGENCY_STOP' 키워드를 포함시키므로
+            // 사용자 안내를 더 친절하게 구분
+            if (/EMERGENCY_STOP|E-Stop|빨간불/.test(message)) {
+                sub.textContent = "관리자에게 문의해 주세요";
+            } else {
+                sub.textContent = "관리자가 확인 중입니다";
+            }
         } else {
-            // NORMAL 또는 미설정
             el.classList.remove("show", "pause", "emerg");
             main.textContent = "";
             sub.textContent  = "";
@@ -45,11 +53,7 @@
         try {
             const res = await fetch(FIREBASE_URL, { cache: "no-store" });
             const data = await res.json();
-            if (data && typeof data === "object") {
-                applyMode(data.mode || "NORMAL", data.message || "");
-            } else {
-                applyMode("NORMAL", "");
-            }
+            applyMode(data && typeof data === "object" ? data : { mode: "NORMAL" });
         } catch (e) {
             // 네트워크 오류 시 직전 상태 유지 (지속 표시되는 게 안전)
             console.warn("[safety_overlay] poll failed:", e);

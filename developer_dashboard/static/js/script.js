@@ -235,9 +235,28 @@ function renderSafetyBanner(sm) {
     } else if (sm.mode === 'EMERGENCY') {
         banner.classList.add('emerg'); banner.classList.remove('pause');
         title.innerText = '비상정지모드';
-        const srcLabel = sm.source === 'EMERGENCY_STATE' ? '로봇 충돌(빨간불)' :
-                         sm.source === 'BUTTON'          ? '대시보드 비상정지 버튼' : (sm.source || '');
+        let srcLabel;
+        if (sm.last_robot_state === 6) {
+            srcLabel = '⚠️ 펜던트의 비상정지 버튼이 눌려 있습니다';
+        } else if (sm.last_robot_state === 3 || sm.last_robot_state === 10) {
+            srcLabel = '서보 꺼짐(SAFE_OFF) - 재기동 필요';
+        } else if (sm.source === 'EMERGENCY_STATE') {
+            srcLabel = '로봇 충돌(빨간불)';
+        } else if (sm.source === 'BUTTON') {
+            srcLabel = '대시보드 비상정지 버튼';
+        } else {
+            srcLabel = sm.source || '';
+        }
         sub.innerText = `${srcLabel} · ${sm.message || ''}`;
+
+        // state 6 (펜던트 E-Stop 물리적으로 눌림) → 두 버튼 모두 비활성화 + 안내
+        const resumeBtn = document.getElementById('safety-resume-btn');
+        const homeBtn   = document.getElementById('safety-home-btn');
+        const eStopHeld = (sm.last_robot_state === 6);
+
+        if (eStopHeld) {
+            sub.innerText = `${srcLabel} · 펜던트 버튼 해제 후 자동 복구됩니다`;
+        }
         if (sm.countdown > 0) {
             timer.classList.remove('hidden');
             timer.innerText = `복귀까지 ${sm.countdown.toFixed(1)}s`;
@@ -245,6 +264,11 @@ function renderSafetyBanner(sm) {
         } else {
             timer.classList.add('hidden');
             actions.classList.remove('hidden');
+            resumeBtn.disabled = eStopHeld;
+            homeBtn.disabled   = eStopHeld;
+            const tip = eStopHeld ? '비상정지 버튼을 먼저 해제하세요' : '';
+            resumeBtn.title = tip;
+            homeBtn.title   = tip;
         }
     }
 }

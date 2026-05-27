@@ -17,11 +17,15 @@ from cv_bridge import CvBridge
 try:
     from dsr_msgs2.srv import (
         MovePause, MoveResume, MoveStop,
-        GetRobotState, SetSafeStopResetType,
+        GetRobotState, SetRobotControl,
     )
     _DSR_SRV_OK = True
 except Exception:
     _DSR_SRV_OK = False
+
+# Doosan SetRobotControl 명령 상수 (문서 기준)
+DSR_CTRL_RESET_SAFE_STOP = 2   # 노란불(SAFE_STOP) 리셋 → 즉시 STANDBY
+DSR_CTRL_RESET_SAFE_OFF  = 3   # 서보꺼짐(SAFE_OFF) 리셋 → 서보 ON, 약 3초 소요
 
 import requests
 
@@ -46,14 +50,16 @@ SAFETY_FRAME_WINDOW_SEC = 2.0
 SAFETY_FRAME_THRESHOLD  = 10
 RESUME_COUNTDOWN_SEC    = 5.0
 ROBOT_STATE_POLL_SEC    = 0.5
+DSR_STATE_STANDBY        = 1
 DSR_STATE_SAFE_OFF       = 3
 DSR_STATE_SAFE_STOP      = 5
 DSR_STATE_EMERGENCY_STOP = 6
 DSR_STATE_SAFE_STOP2     = 9
 DSR_STATE_SAFE_OFF2      = 10
-COLLISION_SAFE_STOP_STATES = {DSR_STATE_SAFE_OFF, DSR_STATE_SAFE_STOP,
-                              DSR_STATE_SAFE_STOP2, DSR_STATE_SAFE_OFF2}
-COLLISION_EMERGENCY_STATES = {DSR_STATE_EMERGENCY_STOP}
+# 노란불 = 보호 정지 (소프트웨어 리셋으로 복구 가능)
+COLLISION_SAFE_STOP_STATES = {DSR_STATE_SAFE_STOP, DSR_STATE_SAFE_STOP2}
+# 빨간불 = 서보꺼짐/비상정지 (사람 개입 또는 서보 재기동 필요)
+COLLISION_EMERGENCY_STATES = {DSR_STATE_SAFE_OFF, DSR_STATE_EMERGENCY_STOP, DSR_STATE_SAFE_OFF2}
 
 # /safety_image 토픽 최신 프레임 (JPEG bytes)
 _safety_lock = threading.Lock()
@@ -200,13 +206,14 @@ class DashboardNode(Node):
             String, f'/{ROBOT_ID}/safety_cmd', 10)
 
         self.cli_pause = self.cli_resume = self.cli_stop = None
-        self.cli_state = self.cli_safereset = None
+        self.cli_state = self.cli_setctl = None
         if _DSR_SRV_OK:
-            self.cli_pause     = self.create_client(MovePause,            f'/{ROBOT_ID}/motion/move_pause')
-            self.cli_resume    = self.create_client(MoveResume,           f'/{ROBOT_ID}/motion/move_resume')
-            self.cli_stop      = self.create_client(MoveStop,             f'/{ROBOT_ID}/motion/move_stop')
-            self.cli_state     = self.create_client(GetRobotState,        f'/{ROBOT_ID}/system/get_robot_state')
-            self.cli_safereset = self.create_client(SetSafeStopResetType, f'/{ROBOT_ID}/system/set_safe_stop_reset_type')
+            self.cli_pause  = self.create_client(MovePause,       f'/{ROBOT_ID}/motion/move_pause')
+            self.cli_resume = self.create_client(MoveResume,      f'/{ROBOT_ID}/motion/move_resume')
+            self.cli_stop   = self.create_client(MoveStop,        f'/{ROBOT_ID}/motion/move_stop')
+            self.cli_state  = self.create_client(GetRobotState,   f'/{ROBOT_ID}/system/get_robot_state')
+            # 문서 기준 정식 복구 서비스: 노란불/서보꺼짐을 실제로 리셋함
+            self.cli_setctl = self.create_client(SetRobotControl, f'/{ROBOT_ID}/system/set_robot_control')
 
         self.latest_frame = None
 
@@ -257,10 +264,34 @@ class DashboardNode(Node):
             req = MoveStop.Request(); req.stop_mode = mode_int
             self.cli_stop.call_async(req)
 
-    def _call_safe_stop_reset(self, reset_type: int = 1):
-        if self.cli_safereset and self.cli_safereset.wait_for_service(timeout_sec=0.2):
-            req = SetSafeStopResetType.Request(); req.reset_type = reset_type
-            self.cli_safereset.call_async(req)
+    def _call_set_robot_control(self, value: int, timeout_sec: float = 5.0) -> bool:
+        """
+        SetRobotControl 동기 호출. 문서 기준:
+          value=2 → CONTROL_RESET_SAFE_STOP (노란불 즉시 해제, 즉시 STANDBY)
+          value=3 → CONTROL_RESET_SAFE_OFF  (서보 ON, 브레이크 해제음 후 ~3초)
+        실패 시 False 반환.
+        """
+        if not self.cli_setctl:
+            return False
+        if not self.cli_setctl.wait_for_service(timeout_sec=1.0):
+            add_log("SAFETY", "set_robot_control 서비스 없음", "ERROR")
+            return False
+        req = SetRobotControl.Request(); req.robot_control = value
+        fut = self.cli_setctl.call_async(req)
+        start = time.time()
+        # 호출은 supervisor thread에서 하므로 spin은 ros_spin_thread가 담당
+        # future가 끝날 때까지 폴링만 함
+        while not fut.done():
+            if time.time() - start > timeout_sec:
+                add_log("SAFETY", f"set_robot_control({value}) 응답 지연", "ERROR")
+                return False
+            time.sleep(0.05)
+        try:
+            res = fut.result()
+            return bool(res and res.success)
+        except Exception as e:
+            add_log("SAFETY", f"set_robot_control({value}) 실패: {e}", "ERROR")
+            return False
 
     def publish_safety_cmd(self, cmd: str, payload: dict | None = None):
         msg = String()
@@ -345,19 +376,87 @@ class DashboardNode(Node):
             return True
 
     def request_reset_home(self):
-        """비상정지 → '처음으로'. controller unpause + 클라우드 리셋 + RESET_HOME publish."""
+        """비상정지 → '처음으로'. 문서 절차에 따라 state별로 복구한 뒤 RESET_HOME publish."""
         with _safety_lock_mode:
-            src = safety_mode_state["source"]
-        if src == "EMERGENCY_STATE":
-            self._call_safe_stop_reset(1)
-            time.sleep(0.2)
-        self._call_resume()
-        time.sleep(0.2)
+            last_st = safety_mode_state["last_robot_state"]
+
+        # state 6 = 비상정지 버튼이 물리적으로 눌려 있는 상태 → 소프트웨어 복구 불가
+        if last_st == DSR_STATE_EMERGENCY_STOP:
+            add_log("SAFETY", "비상정지 버튼(E-Stop)이 눌려 있어 복구 불가. 펜던트에서 버튼을 돌려 해제하세요.", "ERROR")
+            return False
+
+        # 복구 시퀀스 실행 (motion pause 상태도 함께 풀림)
+        ok = self._recover_robot(last_st)
+        if not ok:
+            add_log("SAFETY", "로봇 복구 실패 — RESET_HOME 진행 중단", "ERROR")
+            return False
+
+        # 클라우드 리셋 + 로봇 측 RESET_HOME 시퀀스 발동
         reset_all_firebase_flags()
         self.publish_safety_cmd("RESET_HOME")
         with _safety_lock_mode:
             _set_safety_mode("NORMAL", None, "RESET_HOME 발행 - 로봇 복귀 진행")
         return True
+
+    # ── 핵심: 두산 문서 절차에 따른 state별 복구 ─────────────────────────
+    def _recover_robot(self, last_state: int) -> bool:
+        """
+        문서 'how to restart when yellow&red light' 절차:
+          - state 5 (SAFE_STOP, 노란불) : drl_stop → SetRobotControl(2)
+          - state 3 (SAFE_OFF, 빨간불 서보꺼짐) : drl_stop → SetRobotControl(3) (3초 대기)
+          - state 6 (EMERGENCY_STOP)   : 사람이 펜던트 버튼 돌려 해제해야 → 호출 시점에 6→3 전이 후 다시 진입
+          - 그 외 : motion만 paused 상태일 수 있으므로 MoveResume
+        """
+        # 1) 스크립트 정지 (외력/잔여 모션 안전 확보) — DR_QSTOP_STO = 0
+        self._call_stop(0)
+        time.sleep(0.3)
+
+        if last_state == DSR_STATE_SAFE_STOP or last_state == DSR_STATE_SAFE_STOP2:
+            # 외력 제거를 위해 잠시 대기 (비전 CLEAR 이후라면 사람이 이미 빠진 상태)
+            time.sleep(1.0)
+            ok = self._call_set_robot_control(DSR_CTRL_RESET_SAFE_STOP)
+            add_log("SAFETY", f"SetRobotControl(2) SAFE_STOP 리셋 → {'OK' if ok else 'FAIL'}", "INFO" if ok else "ERROR")
+            time.sleep(1.0)
+            return ok and self._wait_for_standby(timeout=3.0)
+
+        if last_state == DSR_STATE_SAFE_OFF or last_state == DSR_STATE_SAFE_OFF2:
+            ok = self._call_set_robot_control(DSR_CTRL_RESET_SAFE_OFF)
+            add_log("SAFETY", f"SetRobotControl(3) SAFE_OFF 리셋(서보ON) → {'OK' if ok else 'FAIL'}", "INFO" if ok else "ERROR")
+            # 문서: 브레이크 해제음 후 약 3초 소요
+            time.sleep(3.0)
+            return ok and self._wait_for_standby(timeout=3.0)
+
+        # 그 외(state 1/2 등): motion만 paused일 수 있으므로 resume만
+        self._call_resume()
+        return True
+
+    def _wait_for_standby(self, timeout: float = 3.0) -> bool:
+        """robot_state가 STANDBY(1)로 복귀할 때까지 active polling."""
+        start = time.time()
+        while time.time() - start < timeout:
+            st = self._get_robot_state_sync()
+            if st == DSR_STATE_STANDBY:
+                with _safety_lock_mode:
+                    safety_mode_state["last_robot_state"] = st
+                return True
+            time.sleep(0.2)
+        return False
+
+    def _get_robot_state_sync(self, timeout: float = 1.0) -> int:
+        """get_robot_state를 동기 호출 (실패 시 -1)."""
+        if not self.cli_state or not self.cli_state.wait_for_service(timeout_sec=0.2):
+            return -1
+        fut = self.cli_state.call_async(GetRobotState.Request())
+        start = time.time()
+        while not fut.done():
+            if time.time() - start > timeout:
+                return -1
+            time.sleep(0.05)
+        try:
+            res = fut.result()
+            return int(res.robot_state)
+        except Exception:
+            return -1
 
     # ── 주기 처리: get_robot_state 폴링 + 카운트다운 만료 ───────────────
 
@@ -368,16 +467,36 @@ class DashboardNode(Node):
         with _safety_lock_mode:
             end = safety_mode_state["countdown_end"]
             mode = safety_mode_state["mode"]
-            if end is not None and time.time() >= end:
-                safety_mode_state["countdown_end"] = None
-                if mode == "SAFETY_PAUSE":
-                    self._call_resume()
-                    _set_safety_mode("NORMAL", None, "안전정지 해제 - resume")
-                elif mode == "EMERGENCY":
-                    if safety_mode_state["source"] == "EMERGENCY_STATE":
-                        self._call_safe_stop_reset(1)
-                    self._call_resume()
-                    _set_safety_mode("NORMAL", None, "비상정지 해제 - resume")
+            last_st = safety_mode_state["last_robot_state"]
+            src = safety_mode_state["source"]
+        if end is None or time.time() < end:
+            return
+
+        # 카운트다운 만료 → 실제 복구 시퀀스 실행
+        with _safety_lock_mode:
+            safety_mode_state["countdown_end"] = None
+
+        if mode == "SAFETY_PAUSE":
+            # vision 기반 일시정지면 robot_state가 1일 수 있음 → motion resume만
+            # 충돌 기반이면 state 5 → SetRobotControl(2)
+            if self._recover_robot(last_st):
+                with _safety_lock_mode:
+                    _set_safety_mode("NORMAL", None, "안전정지 해제 완료")
+            else:
+                add_log("SAFETY", "안전정지 자동 복구 실패 — 상태 유지", "ERROR")
+                with _safety_lock_mode:
+                    safety_mode_state["countdown_end"] = None  # 카운트다운 다시 시작 안 함
+
+        elif mode == "EMERGENCY":
+            # 비상정지 버튼이 아직 눌려있으면 (state 6) 복구 불가
+            if last_st == DSR_STATE_EMERGENCY_STOP:
+                add_log("SAFETY", "펜던트의 비상정지 버튼이 눌려 있음 — 물리적 해제 필요", "ERROR")
+                return
+            if self._recover_robot(last_st):
+                with _safety_lock_mode:
+                    _set_safety_mode("NORMAL", None, "비상정지 해제 완료")
+            else:
+                add_log("SAFETY", "비상정지 자동 복구 실패 — 펜던트/하드웨어 확인 필요", "ERROR")
 
     def _on_robot_state_resp(self, future):
         try:
@@ -392,11 +511,15 @@ class DashboardNode(Node):
             mode = safety_mode_state["mode"]
             if mode == "NORMAL":
                 if st in COLLISION_EMERGENCY_STATES:
+                    # state 6 / 3 / 10 모두 EMERGENCY
+                    label = {DSR_STATE_EMERGENCY_STOP: "EMERGENCY_STOP(빨간불·E-Stop)",
+                             DSR_STATE_SAFE_OFF:      "SAFE_OFF(서보꺼짐)",
+                             DSR_STATE_SAFE_OFF2:     "SAFE_OFF2(STO)"}.get(st, str(st))
                     _set_safety_mode("EMERGENCY", "EMERGENCY_STATE",
-                                     f"robot_state={st} (EMERGENCY_STOP)")
+                                     f"robot_state={st} {label}")
                 elif st in COLLISION_SAFE_STOP_STATES:
                     _set_safety_mode("SAFETY_PAUSE", "COLLISION",
-                                     f"robot_state={st} (SAFE_STOP)")
+                                     f"robot_state={st} SAFE_STOP(노란불·충돌감지)")
 
 ros_node = None
 
