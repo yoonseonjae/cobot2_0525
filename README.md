@@ -2,13 +2,82 @@
 
 Doosan M0609 협동로봇과 음성/제스처 인식을 활용한 인터랙티브 포토부스 시스템.
 
-```
 사용자 음성 "공주 컨셉" → GPT-4o로 컨셉/소품 추출
    → 로봇이 해당 소품(왕관, 요술봉) 픽앤플레이스
    → 손동작(상하좌우/줌/따봉)으로 카메라 제어
    → 사진 2장 + 3배속 타임랩스 영상 생성
    → QR로 다운로드
-```
+
+---
+
+## 🛠 기술 스택
+
+### 하드웨어
+| 장비 | 역할 |
+|---|---|
+| **Doosan M0609** | 6축 협동로봇. 픽앤플레이스, 제스처 기반 카메라 추적, 외력 감지로 소품 전달 |
+| **OnRobot RG2 그리퍼** | 소품 파지. Modbus TCP(192.168.1.1:502)로 제어 |
+| **Intel RealSense D435i** | 컬러 + Depth 정합 영상. YOLO 검출 → 3D 좌표 변환, 제스처 줌 거리 계산 |
+| **Logitech C270 (USB 웹캠)** | 상단뷰 안전 감시 카메라 (safety_monitor 입력) |
+
+### 로봇 제어 / 미들웨어
+* **ROS2 Humble**: 전체 노드 통신 (토픽 / 서비스 / 액션)
+* **Doosan ROS2 패키지 (`doosan-robot2`)**: `dsr_bringup2`, `dsr_msgs2`, `DSR_ROBOT2` Python API
+* **두산 DRL API**: `movej` / `movel` 동기 모션, `check_force_condition`으로 외력 기반 드롭 트리거, `MovePause` / `MoveResume` / `SetRobotControl(2|3)` 서비스로 안전정지·서보꺼짐 복구
+* **realsense2_camera**: `/camera/camera/color/image_raw/compressed`, `/camera/camera/aligned_depth_to_color/image_raw` 토픽 발행
+
+### AI / 비전
+* **YOLOv8 (Ultralytics)**: 커스텀 가중치 운영 (`260519_best.pt` 소품 검출, `safety_best.pt` 안전 감시용 사람/로봇 세그멘테이션)
+* **MediaPipe Hands**: 단일 손 21개 랜드마크. 따봉 / 검지만 펴기 / 손바닥 펴기 3종 제스처 분류
+* **OpenAI GPT-4o & Whisper**: LangChain 기반 컨셉/소품 키워드 추출 및 한국어 STT
+* **OpenWakeWord**: 커스텀 웨이크워드 인식 ("Hello Rokey")
+* **OpenCV**: 이미지 뷰티 필터 적용 및 MJPEG 스트림 파싱
+
+### 백엔드 & 프론트엔드
+* **Python 3.10 / Flask / Firebase RTDB**: 키오스크 ↔ 로봇 PC 신호 동기화 및 영상 스트리밍
+* **FFmpeg**: WebM 원본 → 3배속 H.264 MP4 타임랩스 인코딩
+* **HTML5 / CSS3 / JS & Firefox Kiosk Mode**: 사용자 UI 및 MediaRecorder API 기반 백그라운드 녹화
+
+---
+
+## 🏗 시스템 아키텍처
+
+본 시스템은 **2대의 PC가 같은 WiFi 공유기 망에 연결**되어 동작하며, 그 위에서 **Firebase Realtime Database가 두 PC를 느슨하게 동기화**하는 구조입니다. 로봇 하드웨어는 모두 로봇 제어 PC에 **유선(이더넷/USB)으로 직결**되어 있어, WiFi가 끊겨도 로봇 자체의 제어 안정성은 영향을 받지 않습니다.
+
+### 네트워크 계층 (3-tier)
+| 계층 | 매체 | 연결 대상 | 용도 |
+|---|---|---|---|
+| **외부 인터넷** | 인터넷 (HTTPS) | 모든 PC ↔ Firebase | 키오스크와 로봇 PC가 작은 신호(시작/종료/컨셉/도구/캡처 등)를 비동기로 주고받는 버스 |
+| **WiFi LAN** | 같은 공유기 망 | 키오스크 PC ↔ 로봇 PC | 키오스크가 로봇 PC의 `:5000/video_feed`에서 MJPEG 영상 수신 및 대시보드 통신 |
+| **유선 / USB** | 이더넷, USB | 로봇 제어 PC ↔ 하드웨어 | 로봇팔, RG2 그리퍼, 카메라 등 제어 하드웨어 직결 |
+
+---
+
+## 🧩 ROS2 노드 그래프 및 제어 구조
+
+본 시스템은 `dsr01` 네임스페이스 아래에서 동작하며, 사이클은 크게 3단계로 흘러갑니다:
+`Phase 1 (음성) → Phase 2 (픽앤플레이스) → Phase 3 (제스처 촬영)` (상시 동작: 안전 모니터링)
+
+각 단계는 `/dsr01/task_complete` 토픽으로 다음 단계에 **로봇 제어권을 인계**합니다. 동시에 두 노드가 로봇 API를 호출하면 충돌하므로, 의도적으로 직렬화한 구조입니다.
+
+### 메인 컨트롤러 내부 구조 (음성 단계 마더보드)
+`pick_and_place_voice/robot_control_07.py`의 `voice_robot_control_node`는 본 시스템의 마더보드 역할을 합니다. 단일 노드 안에 4개의 동시 실행 워커가 돌며, `robot_phase` 딕셔너리를 통해 서로의 안전·복구 상태를 공유합니다:
+* **메인 루프**: 음성 인식 → 소품 스캔 → 픽앤플레이스 → 제어권 인계 시나리오 실행
+* **SafetyCmd 리스너**: `/dsr01/safety_cmd` 구독하여 PAUSE / RESUME / RESET_HOME 반영
+* **Reset 감시**: 데몬 스레드로 대기하다가 `execute_reset_home()` 호출 (충돌 회피)
+* **모션 실행기**: DSR_API (`movej`, `movel`, `check_force_condition`) 호출
+
+### 제스처 단계 컨트롤러 (촬영 단계 마더보드)
+`take_picture/robot_control_node_05.py`의 `gesture_robot_control_node`는 음성 단계가 끝난 뒤 제어권을 인계받는 두 번째 마더보드입니다.
+* **대기 루프**: `task_completed` 플래그가 True가 될 때까지 DSR_API 접근 제한
+* **상대 이동**: `gesture_cmd` 토픽 수신 시 `movel(rel_posx, ref=DR_BASE, mod=DR_MV_MOD_REL)`로 ±100mm 미세 이동
+* **종료 처리**: Firebase `/end.json = true` 감지 시 JHOME_POS 복귀 후 종료
+
+---
+
+## 시스템 구성 및 실행 방법
+
+*(이하 기존 README의 '사전 설치 요구사항', '설치 및 빌드', '실행 방법', '폴더 구조', '알려진 이슈' 내용 유지)*
 
 ---
 
