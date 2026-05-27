@@ -35,3 +35,6 @@ kiosk/firefox_profile/
 # Keep folder markers
 !kiosk/images/.gitkeep
 !kiosk/video/.gitkeep
+
+# 예외: 메인 테마 이미지 등 정적 에셋은 무시하지 않음
+!kiosk/static/images/main_theme.png
