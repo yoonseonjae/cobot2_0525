@@ -189,15 +189,39 @@ class GetKeyword(Node):
         while not self.wakeup_word.is_wakeup():
             pass
 
-        # STT --> Keword Extract --> Embedding
-        output_message = self.stt.speech2text()
-        keyword = self.extract_keyword(output_message)
+        # 유효한 컨셉(해변/공주/생일)에 매핑되는 도구가 감지될 때까지 재시도.
+        # - STT 결과가 비어 있음
+        # - 도구 추출이 비어 있음
+        # - 추출되었지만 어느 컨셉에도 매핑 안 됨 (예: 'shovel'만 감지)
+        # 이런 경우 모두 STT를 다시 시도해 사용자가 다시 말할 수 있게 한다.
+        CONCEPT_TRIGGERS = {"black", "gun", "wand", "crown", "hat", "pink"}
+        keyword = []
+        attempt = 0
+        while True:
+            attempt += 1
+            self.get_logger().info(f"🎤 음성 인식 시도 #{attempt}")
+            output_message = self.stt.speech2text()
+
+            if not output_message or not output_message.strip():
+                self.get_logger().warn(
+                    "음성이 인식되지 않았습니다. '해변', '공주', '생일' 중 원하는 컨셉을 말씀해 주세요. (다시 듣는 중)"
+                )
+                continue
+
+            keyword = self.extract_keyword(output_message)
+            if any(k in CONCEPT_TRIGGERS for k in keyword):
+                break  # 유효한 컨셉 감지 - 루프 종료
+
+            self.get_logger().warn(
+                f"컨셉을 알아듣지 못했어요 (인식 결과: '{output_message.strip()}'). "
+                f"'해변', '공주', '생일' 중 하나로 다시 말씀해 주세요."
+            )
 
         self.get_logger().warn(f"Detected tools: {keyword}")
 
         # 응답 객체 설정
         response.success = True
-        response.message = " ".join(keyword)  # 감지된 키워드를 응답 메시지로 반환
+        response.message = " ".join(keyword)
         return response
 
 
